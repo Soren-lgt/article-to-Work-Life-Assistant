@@ -15,6 +15,7 @@ export function openModal(options = {}) {
     bodyHTML = "",
     submitText = "确定",
     cancelText = "取消",
+    footer = true,
     onSubmit = null,
     onClose = null,
   } = options;
@@ -28,10 +29,10 @@ export function openModal(options = {}) {
         <button type="button" class="modal-x" data-m-close aria-label="关闭">&times;</button>
       </div>
       <div class="modal-body">${bodyHTML}</div>
-      <div class="modal-foot">
+      ${footer ? `<div class="modal-foot">
         <button type="button" class="btn" data-m-cancel>${cancelText}</button>
         <button type="button" class="btn primary" data-m-submit>${submitText}</button>
-      </div>
+      </div>` : ""}
     </div>`;
 
   let closed = false;

@@ -1,49 +1,67 @@
-// Q8 专项：登录后提供退出登录功能
+// R1/Q8 专项：退出登录位于当前账号行、主动退出后不被自动登录、账号弹窗无底部按钮
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import {
-  logoutButtonVisible, buildLogoutRowHTML, accountButtonLabel, accountManagerBodyHTML,
+  logoutButtonVisible, logoutActionButtonHTML, shouldAutoLogin,
+  accountButtonLabel, accountManagerBodyHTML, accountListHTML,
 } from "../js/app.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const appDir = join(here, "..");
-const appSrc = readFileSync(join(appDir, "js/app.js"), "utf8");
+const read = (rel) => readFileSync(join(appDir, rel), "utf8");
 
-test("logoutButtonVisible：仅登录态（有当前账号 id）为真", () => {
+test("logoutButtonVisible：仅登录态为真", () => {
   assert.equal(logoutButtonVisible(null), false);
   assert.equal(logoutButtonVisible(""), false);
   assert.equal(logoutButtonVisible("u1"), true);
 });
 
-test("buildLogoutRowHTML：未登录不渲染；登录态渲染退出按钮", () => {
-  assert.equal(buildLogoutRowHTML(null), "");
-  assert.equal(buildLogoutRowHTML(""), "");
-  const h = buildLogoutRowHTML("u1");
+test("退出按钮片段：data-act=logout 且文案为退出", () => {
+  const h = logoutActionButtonHTML();
   assert.ok(h.includes('data-act="logout"'));
-  assert.ok(h.includes("退出登录"));
-  assert.ok(h.includes("danger"));
+  assert.ok(h.includes("退出"));
 });
 
-test("退出（currentAccountId=null）后顶栏按钮回显为“登录”", () => {
+test("shouldAutoLogin：主动退出后不自动登录；未退出且有账号才自动登录", () => {
+  assert.equal(shouldAutoLogin(true, true), false);
+  assert.equal(shouldAutoLogin(true, false), false);
+  assert.equal(shouldAutoLogin(false, true), true);
+  assert.equal(shouldAutoLogin(false, false), false);
+});
+
+test("退出后顶栏按钮回显为登录", () => {
   assert.equal(accountButtonLabel("", false), "登录");
 });
 
-test("账号管理弹窗含退出按钮容器", () => {
-  assert.ok(accountManagerBodyHTML().includes('data-el="logout"'));
+test("账号列表：仅当前账号行渲染退出按钮", () => {
+  const html = accountListHTML(
+    [{ id: "a", name: "甲", passwordHash: null }, { id: "b", name: "乙", passwordHash: "x" }],
+    "a"
+  );
+  const logoutCount = (html.match(/data-act="logout"/g) || []).length;
+  assert.equal(logoutCount, 1);
+  assert.ok(html.indexOf('data-id="a"') < html.indexOf('data-act="logout"') || html.includes('data-act="logout"'));
 });
 
-test("app.js 存在退出分支：清空 currentAccountId 并刷新", () => {
-  assert.ok(appSrc.includes("act === 'logout'"));
-  assert.ok(/currentAccountId:\s*null/.test(appSrc), "退出应把当前账号置空");
-  assert.ok(appSrc.includes("refreshAccounts()"), "退出后应刷新顶栏");
+test("账号弹窗骨架为纵向表单且不再使用底部退出条", () => {
+  const h = accountManagerBodyHTML();
+  assert.ok(h.includes("acc-form"));
+  assert.ok(!h.includes('data-el="logout"'));
 });
 
-test("退出按钮位于账号管理弹窗内（动态注入，当前账号才出现）", () => {
-  const loggedIn = buildLogoutRowHTML("u1");
-  const guest = buildLogoutRowHTML(null);
-  assert.notEqual(loggedIn.indexOf("退出登录"), -1);
-  assert.equal(guest.includes("退出登录"), false);
+test("app.js：账号弹窗关闭底部按钮、退出置 loggedOut 且刷新", () => {
+  const src = read("js/app.js");
+  assert.ok(src.includes("footer: false"), "账号弹窗不应显示关闭/完成按钮");
+  assert.ok(src.includes("act === 'logout'"));
+  assert.ok(/loggedOut:\s*true/.test(src), "退出应标记主动退出");
+  assert.ok(src.includes("shouldAutoLogin"));
+});
+
+test("modal.js 支持 footer 选项关闭底部按钮区", () => {
+  const src = read("js/ui/modal.js");
+  assert.ok(src.includes("footer = true"));
+  assert.ok(src.includes("modal-foot"));
 });

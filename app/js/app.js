@@ -31,16 +31,21 @@ export function accountButtonLabel(currentName, loggedIn) {
   return loggedIn && currentName ? currentName : '登录';
 }
 
-// 纯函数：账号管理弹窗静态骨架（新建表单 + 列表容器）
+// 纯函数：账号管理弹窗静态骨架（账号名/密码上下排列，创建按钮居中于下方 + 列表容器）
 export function accountManagerBodyHTML() {
   return `
-    <div class="row" style="gap:8px;margin-bottom:10px">
-      <input data-f="name" placeholder="新账号名称" style="flex:1">
-      <input data-f="pwd" type="password" placeholder="可选本地密码">
-      <button class="btn primary" data-act="create">创建账号</button>
+    <div class="acc-form">
+      <label class="acc-field"><span>新账号名称</span>
+        <input data-f="name" placeholder="新账号名称">
+      </label>
+      <label class="acc-field"><span>可选本地密码</span>
+        <input data-f="pwd" type="password" placeholder="可选本地密码">
+      </label>
+      <div class="acc-form-actions">
+        <button class="btn primary" data-act="create">创建账号</button>
+      </div>
     </div>
-    <div data-el="list"></div>
-    <div data-el="logout"></div>`;
+    <div data-el="list"></div>`;
 }
 
 // 纯函数：账号列表行（当前账号不显示“登录”，显示当前标记；含改名/设密码/删除）
@@ -52,6 +57,7 @@ export function accountListHTML(accounts, currentId) {
       <span style="flex:1">${escapeHtml(a.name)}${active ? ' <span class="muted">[当前]</span>' : ''}${a.passwordHash ? ' 🔒' : ''}</span>
       <span class="row" style="gap:6px">
         ${active ? '' : `<button class="btn" data-act="switch" data-id="${a.id}">登录</button>`}
+        ${active ? logoutActionButtonHTML() : ''}
         <button class="btn" data-act="rename" data-id="${a.id}" data-name="${escapeHtml(a.name)}">改名</button>
         <button class="btn" data-act="pwd" data-id="${a.id}">设密码</button>
         <button class="btn danger" data-act="del" data-id="${a.id}" data-name="${escapeHtml(a.name)}">删除</button>
@@ -60,14 +66,17 @@ export function accountListHTML(accounts, currentId) {
   }).join('');
 }
 
-// 纯函数：是否处于登录态（决定是否展示退出按钮）
+// 纯函数：是否处于登录态（决定当前账号行是否显示退出按钮）
 export function logoutButtonVisible(currentId) { return Boolean(currentId); }
 
-// 纯函数：退出登录行；未登录时不渲染
-export function buildLogoutRowHTML(currentId) {
-  return currentId
-    ? '<div class="row" style="margin:10px 0 0"><button class="btn danger" data-act="logout" style="width:100%">退出登录</button></div>'
-    : '';
+// 纯函数：退出按钮片段（仅渲染在当前账号操作行）
+export function logoutActionButtonHTML() {
+  return '<button class="btn danger" data-act="logout">退出</button>';
+}
+
+// 纯函数：是否允许自动登录（用户主动退出后本次会话不再自动选号）
+export function shouldAutoLogin(explicitLogout, hasAccounts) {
+  return !explicitLogout && hasAccounts;
 }
 
 export const App = {
@@ -124,9 +133,14 @@ export async function refreshAccounts() {
     AppState.set({ currentAccountId: null });
     return App.accounts;
   }
+  if (!shouldAutoLogin(AppState.loggedOut, App.accounts.length > 0)) {
+    AppState.set({ currentAccountId: null });
+    btn.textContent = accountButtonLabel('', false);
+    return App.accounts;
+  }
   let cur = AppState.currentAccountId;
   if (!cur || !App.accounts.some((a) => a.id === cur)) cur = App.accounts[0].id;
-  AppState.set({ currentAccountId: cur });
+  AppState.set({ currentAccountId: cur, loggedOut: false });
   const curAcc = App.accounts.find((a) => a.id === cur);
   btn.textContent = accountButtonLabel(curAcc ? curAcc.name : '', Boolean(curAcc));
   return App.accounts;
@@ -154,10 +168,8 @@ export async function refreshNotify() {
 async function openAccountManager() {
   const ctl = openModal({
     title: '账号管理',
-    submitText: '完成',
-    cancelText: '关闭',
+    footer: false,
     bodyHTML: accountManagerBodyHTML(),
-    onSubmit: () => false,
   });
   if (!ctl) return;
 
@@ -165,8 +177,6 @@ async function openAccountManager() {
     App.accounts = await Accounts.list(App.repo);
     const list = ctl.body.querySelector('[data-el="list"]');
     list.innerHTML = accountListHTML(App.accounts, AppState.currentAccountId);
-    const logoutBox = ctl.body.querySelector('[data-el="logout"]');
-    if (logoutBox) logoutBox.innerHTML = buildLogoutRowHTML(AppState.currentAccountId);
   }
 
   ctl.overlay.addEventListener('click', async (e) => {
@@ -177,6 +187,7 @@ async function openAccountManager() {
         const name = ctl.body.querySelector('[data-f="name"]').value;
         const pwd = ctl.body.querySelector('[data-f="pwd"]').value;
         await Accounts.create(App.repo, { name, password: pwd });
+        AppState.set({ loggedOut: false });
         await refreshAccounts();
         await refresh();
       } else if (act === 'switch') {
@@ -185,7 +196,7 @@ async function openAccountManager() {
           const p = window.prompt('请输入该账号本地密码') || '';
           if (!await Accounts.verify(App.repo, id, p)) { window.alert('密码错误'); return; }
         }
-        AppState.set({ currentAccountId: id });
+        AppState.set({ currentAccountId: id, loggedOut: false });
         await refreshAccounts();
         await refresh();
       } else if (act === 'rename') {
@@ -206,7 +217,7 @@ async function openAccountManager() {
         await refreshAccounts();
         await refresh();
       } else if (act === 'logout') {
-        AppState.set({ currentAccountId: null });
+        AppState.set({ currentAccountId: null, loggedOut: true });
         await refreshAccounts();
         await refresh();
       }

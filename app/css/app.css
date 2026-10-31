@@ -193,3 +193,8 @@ html, body {
   white-space: nowrap;
 }
 .account-btn:hover { border-color: var(--primary); }
+
+.acc-form { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+.acc-field { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
+.acc-field input { padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--text); }
+.acc-form-actions { display: flex; justify-content: center; margin-top: 4px; }
