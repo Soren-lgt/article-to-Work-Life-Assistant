@@ -169,3 +169,13 @@ html, body {
 .nav-card:hover { transform: translateY(-3px); box-shadow: 0 8px 20px rgba(47, 111, 237, .14); border-color: var(--primary); }
 .nav-card:active { transform: translateY(-1px); }
 .greet-corner { position: fixed; right: 18px; bottom: 14px; z-index: 6; color: var(--muted); font-size: 13px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; }
+/* ===== 通用模态框（Q2 起统一使用，可可靠关闭） ===== */
+.modal-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, .42); display: flex; align-items: center; justify-content: center; z-index: 50; }
+.modal-box { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; width: min(420px, 92vw); padding: 16px; box-shadow: 0 12px 40px rgba(0, 0, 0, .22); }
+.modal-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.modal-x { border: none; background: transparent; font-size: 20px; cursor: pointer; color: var(--muted); line-height: 1; padding: 0 4px; }
+.modal-body { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+.modal-foot { display: flex; justify-content: flex-end; gap: 8px; }
+.modal-body label { font-size: 12px; color: var(--muted); }
+.modal-body input, .modal-body select, .modal-body textarea { padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--text); font-family: inherit; }
+.modal-body textarea { resize: vertical; min-height: 72px; }

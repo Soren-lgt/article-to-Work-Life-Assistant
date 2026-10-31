@@ -1,7 +1,8 @@
 // AI生成
-// 今日计划页：按天增删改/勾选、优先级、备注；日期切换；月度概览
+// 今日计划页：按天增删改/勾选、优先级、备注；日期切换；月度概览；新增任务走可靠模态弹窗
 import { TodayPlan } from '../lib/todayplan.js';
 import { todayStr, monthStr } from '../lib/utils.js';
+import { openModal } from '../ui/modal.js';
 
 function pad(n) { return String(n).padStart(2, '0'); }
 function shiftDate(date, delta) {
@@ -14,6 +15,11 @@ function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
   }[c]));
+}
+
+// 纯函数：“今天”按钮文案——当天显示“今天”，非当天显示“返回今天”
+export function todayHomeButtonLabel(isToday) {
+  return isToday ? '今天' : '返回今天';
 }
 
 export default {
@@ -32,20 +38,15 @@ export default {
             <button class="btn" data-act="prev">&lsaquo; 前一天</button>
             <strong data-el="dateLabel"></strong>
             <button class="btn" data-act="next">后一天 &rsaquo;</button>
-            <button class="btn" data-act="today">今天</button>
+            <button class="btn" data-act="today"></button>
           </div>
           <div class="row">
             <span class="muted" data-el="count"></span>
             <button class="btn" data-act="toggleView">月度概览</button>
+            <button class="btn primary" data-act="add">添加任务</button>
           </div>
         </div>
         <div data-el="dayView">
-          <div class="row" style="gap:8px;margin-bottom:8px">
-            <input data-el="newTitle" placeholder="添加今天要做的事" style="flex:1">
-            <select data-el="newPriority"><option>高</option><option selected>中</option><option>低</option></select>
-          </div>
-          <input data-el="newNote" placeholder="备注（可选）" style="width:100%;margin-bottom:8px">
-          <button class="btn primary" data-act="add">添加</button>
           <div data-el="list" style="margin-top:10px"></div>
         </div>
         <div data-el="monthView" hidden></div>
@@ -57,25 +58,41 @@ export default {
     const dayView = q('[data-el="dayView"]');
     const monthView = q('[data-el="monthView"]');
     const listEl = q('[data-el="list"]');
-    const newTitle = q('[data-el="newTitle"]');
-    const newPriority = q('[data-el="newPriority"]');
-    const newNote = q('[data-el="newNote"]');
+    const todayBtn = q('[data-act="today"]');
     const viewBtn = q('[data-act="toggleView"]');
 
-    async function add() {
+    function syncTodayButton() {
+      todayBtn.textContent = todayHomeButtonLabel(date === todayStr());
+    }
+
+    function openAddModal() {
       const accId = state.currentAccountId;
       if (!accId) { window.alert('请先在设置中创建并选择账号'); return; }
-      try {
-        await TodayPlan.add(repo, accId, {
-          title: newTitle.value, date, priority: newPriority.value, note: newNote.value.trim(),
-        });
-        newTitle.value = ''; newNote.value = '';
-        await refresh();
-      } catch (err) { window.alert(err.message); }
+      const ctl = openModal({
+        title: '新增今日计划',
+        submitText: '添加',
+        bodyHTML: `
+          <label>任务标题</label>
+          <input data-f="title" placeholder="要做什么？">
+          <label>优先级</label>
+          <select data-f="priority"><option>高</option><option selected>中</option><option>低</option></select>
+          <label>备注（可选）</label>
+          <input data-f="note" placeholder="补充说明">`,
+        onSubmit: async () => {
+          const title = ctl.body.querySelector('[data-f="title"]').value.trim();
+          if (!title) { window.alert('计划内容不能为空'); return true; } // 校验失败保持弹窗
+          const priority = ctl.body.querySelector('[data-f="priority"]').value;
+          const note = ctl.body.querySelector('[data-f="note"]').value.trim();
+          await TodayPlan.add(repo, accId, { title, date, priority, note });
+          await refresh();
+          return false; // 成功后自动关闭弹窗
+        },
+      });
     }
 
     async function renderDay() {
-      dateLabel.textContent = date + (date === todayStr() ? '（今天）' : '');
+      dateLabel.textContent = date;
+      syncTodayButton();
       const accId = state.currentAccountId;
       const rows = accId ? await TodayPlan.listByDate(repo, accId, date) : [];
       countEl.textContent = '共 ' + rows.length + ' 项（完成 ' + rows.filter((r) => r.done).length + '）';
@@ -99,6 +116,7 @@ export default {
     async function renderMonth() {
       const accId = state.currentAccountId;
       dateLabel.textContent = month + ' 月度概览';
+      syncTodayButton();
       if (!accId) { monthView.innerHTML = '<div class="muted">请先选择账号。</div>'; return; }
       const s = await TodayPlan.monthSummary(repo, accId, month);
       const days = Object.entries(s.byDay).sort((a, b) => a[0].localeCompare(b[0]));
@@ -130,7 +148,7 @@ export default {
       if (act === 'prev') { date = shiftDate(date, -1); month = date.slice(0, 7); await refresh(); }
       else if (act === 'next') { date = shiftDate(date, 1); month = date.slice(0, 7); await refresh(); }
       else if (act === 'today') { date = todayStr(); month = monthStr(); await refresh(); }
-      else if (act === 'add') { await add(); }
+      else if (act === 'add') { openAddModal(); }
       else if (act === 'toggleView') { view = view === 'day' ? 'month' : 'day'; await refresh(); }
       else if (op === 'toggle') { await TodayPlan.toggle(repo, id); await refresh(); }
       else if (op === 'del') { if (window.confirm('确认删除该计划？')) { await TodayPlan.remove(repo, id); await refresh(); } }
@@ -139,8 +157,6 @@ export default {
         if (t != null) { await TodayPlan.update(repo, id, { title: t }); await refresh(); }
       }
     });
-
-    newTitle.addEventListener('keydown', async (e) => { if (e.key === 'Enter') await add(); });
 
     if (el.__unsub) el.__unsub();
     el.__unsub = state.subscribe(() => { refresh(); });
