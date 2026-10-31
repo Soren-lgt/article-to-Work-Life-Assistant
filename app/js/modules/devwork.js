@@ -1,11 +1,26 @@
 // AI生成
-// 开发工作页：开发任务 / Bug 记录 / 代码片段（三 Tab，支持增删改与状态流转）
+// 开发工作页：开发任务 / Bug 记录 / 代码片段（三 Tab）；代码片段新增/编辑走可靠模态，代码用多行输入框
 import { DevWork, TASK_STATUS, BUG_STATUS } from '../lib/devwork.js';
+import { openModal } from '../ui/modal.js';
 
 function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, (c) => ({
+  return String(s ?? '').replace(/[&<>"']/g, (c) => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
   }[c]));
+}
+
+// 纯函数：代码片段表单 HTML（代码区为多行 textarea，区别于任务/Bug 的单行输入）
+export function snippetFormHTML(prefill = {}) {
+  const v = (k) => escapeHtml(prefill[k] || '');
+  return `
+    <label>片段标题</label>
+    <input data-f="title" value="${v('title')}" placeholder="片段名称">
+    <label>语言（如 js / python，可留空）</label>
+    <input data-f="lang" value="${v('lang')}" placeholder="语言标签">
+    <label>代码内容（多行输入）</label>
+    <textarea data-f="code" rows="8" spellcheck="false" placeholder="粘贴或编写代码……">${v('code')}</textarea>
+    <label>描述（可选）</label>
+    <input data-f="desc" value="${v('desc')}" placeholder="用途说明">`;
 }
 
 export default {
@@ -80,6 +95,7 @@ export default {
           <div class="row" style="justify-content:space-between">
             <span style="flex:1">${escapeHtml(s.title)} <span class="muted">${escapeHtml(s.lang)}</span></span>
             <button class="btn" data-op="sexpand" data-id="${s.id}" style="padding:2px 8px">${expanded.has(s.id) ? '收起' : '查看'}</button>
+            <button class="btn" data-op="sedit" data-id="${s.id}" style="padding:2px 8px">编辑</button>
             <button class="btn" data-op="scopy" data-id="${s.id}" style="padding:2px 8px">复制</button>
             <button class="btn danger" data-op="sdel" data-id="${s.id}" style="padding:2px 8px">删除</button>
           </div>
@@ -95,6 +111,26 @@ export default {
       if (tab === 'task') await renderTasks();
       else if (tab === 'bug') await renderBugs();
       else await renderSnippets();
+    }
+
+    // 代码片段：新增 / 编辑共用模态，代码为多行 textarea，关闭可靠（遮罩/取消/×/提交均可关）
+    function openSnippetModal(prefill = {}) {
+      if (!accId()) return;
+      const ctl = openModal({
+        title: prefill.id ? '编辑代码片段' : '新增代码片段',
+        submitText: '保存',
+        bodyHTML: snippetFormHTML(prefill),
+        onSubmit: async () => {
+          const g = (k) => ctl.body.querySelector(`[data-f="${k}"]`).value;
+          const title = g('title').trim();
+          if (!title) { window.alert('片段标题不能为空'); return true; } // 校验失败保持弹窗
+          const payload = { title, lang: g('lang').trim(), code: g('code'), desc: g('desc').trim() };
+          if (prefill.id) await DevWork.updateSnippet(repo, prefill.id, payload);
+          else await DevWork.addSnippet(repo, state.currentAccountId, payload);
+          await render();
+          return false; // 成功自动关闭
+        },
+      });
     }
 
     el.addEventListener('click', async (e) => {
@@ -117,11 +153,7 @@ export default {
           const symptom = window.prompt('现象（可留空）', '') || '';
           try { await DevWork.addBug(repo, state.currentAccountId, { title, symptom }); } catch (err) { window.alert(err.message); return; }
         } else {
-          const title = window.prompt('片段标题');
-          if (title == null) return;
-          const lang = window.prompt('语言（可留空）', '') || '';
-          const code = window.prompt('代码内容', '') || '';
-          try { await DevWork.addSnippet(repo, state.currentAccountId, { title, lang, code }); } catch (err) { window.alert(err.message); return; }
+          openSnippetModal({});
         }
         await render();
         return;
@@ -137,6 +169,10 @@ export default {
           try { await navigator.clipboard.writeText(s.code); window.alert('代码已复制'); }
           catch (err) { window.prompt('复制以下代码', s.code); }
         }
+      }
+      else if (op === 'sedit') {
+        const s = await repo.get('devSnippet', e.target.dataset.id);
+        if (s) openSnippetModal(s);
       }
       else if (op === 'tedit') {
         const id = e.target.dataset.id;
