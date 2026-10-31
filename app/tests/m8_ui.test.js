@@ -32,7 +32,7 @@ test('app.css 对超长文本设防溢出（overflow-wrap）', () => {
 
 test('index.html 顶部工具条含账号切换/通知/快速备忘三要素与三层框架', () => {
   const html = readFileSync(join(appDir, 'index.html'), 'utf8');
-  assert.match(html, /id="accountSwitch"/);
+  assert.match(html, /id="accountBtn"/);
   assert.match(html, /id="notifyBell"/);
   assert.match(html, /id="notifyBadge"/);
   assert.match(html, /id="quickMemo"/);

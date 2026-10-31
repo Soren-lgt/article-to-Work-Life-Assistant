@@ -38,7 +38,7 @@ test('index.html 含 7 个导航项与 7 个模块容器，且与模块一一对
   }
   assert.match(html, /id="quickMemo"/);
   assert.match(html, /id="notifyBadge"/);
-  assert.match(html, /id="accountSwitch"/);
+  assert.match(html, /id="accountBtn"/);
 });
 
 test('app.js 注册全部模块并导出关键函数', async () => {

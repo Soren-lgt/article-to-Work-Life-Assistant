@@ -1,6 +1,6 @@
 // AI生成
-// 数据与设置：账号管理 / 数据概览 / 备份导出 / 恢复导入 / 数据清理 / 通用设置
-import { Accounts } from '../lib/accounts.js';
+// 数据与设置：数据概览 / 备份导出 / 恢复导入 / 数据清理 / 通用设置
+// 账号管理已收纳到顶栏“登录/账号名”弹窗（app.js），本页不再展示账号卡片。
 import { Backup } from '../lib/backup.js';
 import { Ledger } from '../lib/ledger.js';
 
@@ -52,84 +52,6 @@ function render(el, ctx) {
   const prefs = loadPrefs();
   ensureThemeCss();
   applyTheme(prefs.theme || 'light');
-
-  // ---------- 账号管理 ----------
-  const accCard = document.createElement('div');
-  accCard.className = 'card';
-  accCard.innerHTML = '<h3 style="margin-top:0">账号（本机多账号）</h3>';
-  const form = document.createElement('div');
-  form.className = 'row';
-  form.style.marginBottom = '10px';
-  const nameInput = document.createElement('input');
-  nameInput.placeholder = '新账号名称';
-  const pwdInput = document.createElement('input');
-  pwdInput.placeholder = '可选：本地密码';
-  pwdInput.type = 'password';
-  const addBtn = document.createElement('button');
-  addBtn.className = 'btn primary';
-  addBtn.textContent = '创建账号';
-  form.append(nameInput, pwdInput, addBtn);
-  const accList = document.createElement('div');
-  accCard.append(form, accList);
-
-  addBtn.addEventListener('click', async () => {
-    try {
-      await Accounts.create(repo, { name: nameInput.value, password: pwdInput.value });
-      nameInput.value = ''; pwdInput.value = '';
-      await app.refreshAccounts();
-      await refreshAccounts();
-    } catch (e) { window.alert(e.message); }
-  });
-
-  async function refreshAccounts() {
-    const accounts = await Accounts.list(repo);
-    accList.innerHTML = '';
-    if (accounts.length === 0) {
-      accList.innerHTML = '<div class="muted">还没有账号，请先创建一个。</div>';
-      return;
-    }
-    for (const a of accounts) {
-      const row = document.createElement('div');
-      row.className = 'row';
-      row.style.marginBottom = '6px';
-      const label = document.createElement('div');
-      label.style.flex = '1';
-      label.textContent = a.name + (a.passwordHash ? '（有本地密码）' : '');
-      if (app.state.currentAccountId === a.id) {
-        const tag = document.createElement('span');
-        tag.className = 'muted';
-        tag.textContent = ' [当前]';
-        label.appendChild(tag);
-      }
-      const renameBtn = document.createElement('button');
-      renameBtn.className = 'btn'; renameBtn.textContent = '改名';
-      renameBtn.addEventListener('click', async () => {
-        const n = window.prompt('新名称', a.name);
-        if (n == null) return;
-        try { await Accounts.rename(repo, a.id, n); await app.refreshAccounts(); await refreshAccounts(); }
-        catch (e) { window.alert(e.message); }
-      });
-      const pwdBtn = document.createElement('button');
-      pwdBtn.className = 'btn'; pwdBtn.textContent = '设密码';
-      pwdBtn.addEventListener('click', async () => {
-        const p = window.prompt('新的本地密码（留空表示清除密码）', '');
-        if (p == null) return;
-        await Accounts.setPassword(repo, a.id, p);
-        await app.refreshAccounts();
-        await refreshAccounts();
-      });
-      const delBtn = document.createElement('button');
-      delBtn.className = 'btn danger'; delBtn.textContent = '删除';
-      delBtn.addEventListener('click', async () => {
-        if (!window.confirm('确认删除账号「' + a.name + '」？（仅删除该账号记录）')) return;
-        await Accounts.remove(repo, a.id);
-        await app.refreshAccounts();
-        await refreshAccounts();
-      });
-      row.append(label, renameBtn, pwdBtn, delBtn);
-      accList.appendChild(row);
-    }
-  }
 
   // ---------- 数据概览 ----------
   const statCard = document.createElement('div');
@@ -280,7 +202,7 @@ function render(el, ctx) {
   async function refreshCards() {
     cardBox.innerHTML = '';
     const accId = app.state.currentAccountId;
-    if (!accId) { cardBox.innerHTML = '<div class="muted">请先创建账号。</div>'; return; }
+    if (!accId) { cardBox.innerHTML = '<div class="muted">请先在右上角登录账号。</div>'; return; }
     await Ledger.ensureDefaultCards(repo, accId);
     const cards = await Ledger.listCards(repo, accId);
     for (const c of cards) {
@@ -318,10 +240,9 @@ function render(el, ctx) {
 
   prefCard.appendChild(prefBox);
 
-  el.append(accCard, statCard, bakCard, cleanCard, prefCard);
+  el.append(statCard, bakCard, cleanCard, prefCard);
 
   async function refreshAll() {
-    await refreshAccounts();
     await refreshStats();
     await refreshCards();
   }
