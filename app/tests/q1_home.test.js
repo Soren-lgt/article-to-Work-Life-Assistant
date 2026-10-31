@@ -2,6 +2,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import home, { isNavControl } from "../js/modules/home.js";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
+const here = dirname(fileURLToPath(import.meta.url));
+const homeSrc = readFileSync(join(here, "..", "js/modules/home.js"), "utf8");
 
 test("home 模块契约：route/title/mount 齐全", () => {
   assert.equal(home.route, "home");
@@ -27,4 +32,11 @@ test("isNavControl：元素嵌套在控件内时（closest 命中）判定为排
   assert.equal(isNavControl(spanInsideButton), true);
   const plainSpan = { tagName: "SPAN", closest: () => null };
   assert.equal(isNavControl(plainSpan), false);
+});
+
+test("R2：首页卡片移除查看全部/去记账等文字链接，容器使用自适应布局且四张卡跳转保留", () => {
+  assert.ok(!homeSrc.includes("查看全部"), "不应再有查看全部链接");
+  assert.ok(!homeSrc.includes("去记账"), "不应再有点记账链接");
+  assert.ok(homeSrc.includes('class="home-grid"'), "应使用自适应网格类");
+  assert.equal((homeSrc.match(/data-goto=/g) || []).length, 4, "四张功能卡跳转锚点保留");
 });

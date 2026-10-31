@@ -33,28 +33,28 @@ export default {
     const { repo, state } = ctx;
 
     el.innerHTML = `
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+      <div class="home-grid">
         <div class="card nav-card" data-goto="#today">
           <div class="row" style="justify-content:space-between">
-            <strong>今日计划</strong><a href="#today" class="muted" data-no-nav>查看全部 &rsaquo;</a>
+            <strong>今日计划</strong>
           </div>
           <div data-el="todayPlan" style="margin-top:8px"></div>
         </div>
         <div class="card nav-card" data-goto="#group">
           <div class="row" style="justify-content:space-between">
-            <strong>同组计划</strong><a href="#group" class="muted" data-no-nav>进入 &rsaquo;</a>
+            <strong>同组计划</strong>
           </div>
           <div class="muted" data-el="group" style="margin-top:8px">&mdash;</div>
         </div>
         <div class="card nav-card" data-goto="#quiz">
           <div class="row" style="justify-content:space-between">
-            <strong>题库</strong><a href="#quiz" class="muted" data-no-nav>进入 &rsaquo;</a>
+            <strong>题库</strong>
           </div>
           <div class="muted" data-el="quiz" style="margin-top:8px">&mdash;</div>
         </div>
         <div class="card nav-card" data-goto="#ledger">
           <div class="row" style="justify-content:space-between">
-            <strong>每日记账</strong><a href="#ledger" class="muted" data-no-nav>去记账 &rsaquo;</a>
+            <strong>每日记账</strong>
           </div>
           <div data-el="ledger" style="margin-top:8px"></div>
         </div>
