@@ -1,0 +1,92 @@
+// Q5 题库改造专项测试：按钮排布 / 题库进入删除行 / 判断对错选项 / 动态选项行 / 契约骨架
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { MemoryAdapter, Repository } from "../js/lib/db.js";
+import { Quiz } from "../js/lib/quiz.js";
+import quiz, { buildTopActionsHTML, buildBankRowHTML, buildJudgeOptionHTML, buildChoiceOptionRowHTML } from "../js/modules/quiz.js";
+
+test("顶部动作：顺序练习、考试模式在新建题库左侧且三者相邻，无题时禁用", () => {
+  const h = buildTopActionsHTML(3);
+  const i1 = h.indexOf("顺序练习");
+  const i2 = h.indexOf("考试模式");
+  const i3 = h.indexOf("新建题库");
+  assert.ok(i1 >= 0 && i2 > i1 && i3 > i2, "顺序练习 < 考试模式 < 新建题库");
+  assert.ok(!buildTopActionsHTML(3).includes("disabled"));
+  assert.ok(buildTopActionsHTML(0).includes("disabled"));
+});
+
+test("题库行：名称 + 进入按钮 + 进入右侧删除按钮", () => {
+  const h = buildBankRowHTML({ id: "b1", name: "数据结构" }, null);
+  assert.ok(h.includes("数据结构"));
+  assert.match(h, /data-enter="b1"/);
+  assert.match(h, /data-delbank="b1"/);
+  const enter = h.indexOf("进入");
+  const del = h.indexOf("删除");
+  assert.ok(del > enter, "删除按钮在进入按钮右侧");
+});
+
+test("判断题固定给出正确/错误两个单选项", () => {
+  const h = buildJudgeOptionHTML();
+  assert.ok(h.includes("正确"));
+  assert.ok(h.includes("错误"));
+  assert.equal((h.match(/type="radio"/g) || []).length, 2);
+});
+
+test("单选/多选选项行含文本输入与正确标记，支持动态添加", () => {
+  const h = buildChoiceOptionRowHTML();
+  assert.ok(h.includes("data-opttext"));
+  assert.ok(h.includes("data-optok"));
+  assert.ok(h.includes("data-rowdel"));
+});
+
+test("题库分类隔离：choice 题库不混入 qa 题库", async () => {
+  const r = new Repository(new MemoryAdapter());
+  await Quiz.addBank(r, "u1", "choice", "选择库");
+  await Quiz.addBank(r, "u1", "qa", "问答库");
+  assert.equal((await Quiz.listBanks(r, "u1", "choice")).length, 1);
+  assert.equal((await Quiz.listBanks(r, "u1", "qa")).length, 1);
+});
+
+test("判断题入库答案为对/错；多选可保存多选项答案", async () => {
+  const r = new Repository(new MemoryAdapter());
+  const bank = await Quiz.addBank(r, "u1", "choice", "C");
+  const judge = await Quiz.addQuestion(r, bank.id, { stem: "判断", type: "judge", answer: "对" });
+  assert.deepEqual(judge.options, ["对", "错"]);
+  const multi = await Quiz.addQuestion(r, bank.id, { stem: "多选", type: "multiple", options: ["A", "B"], answer: ["A", "B"] });
+  assert.deepEqual(multi.answer, ["A", "B"]);
+});
+
+test("quiz 模块契约完整", () => {
+  assert.equal(quiz.route, "quiz");
+  assert.equal(typeof quiz.mount, "function");
+});
+
+function stubEl() {
+  return {
+    innerHTML: "", textContent: "", value: "", dataset: {},
+    addEventListener() {}, onclick: null, remove() {}, appendChild() {}, removeChild() {},
+    insertAdjacentHTML() {}, lastElementChild: null,
+    querySelector() { return stubEl(); }, querySelectorAll() { return []; },
+  };
+}
+function makeState() {
+  return { currentAccountId: "u1", subscribe() { return () => {}; }, set() {}, emit() {}, get() { return undefined; } };
+}
+function installGlobals() {
+  globalThis.window = { alert() {}, confirm: () => true, prompt: () => null, location: { hash: "" } };
+  globalThis.document = { createElement: () => stubEl(), body: stubEl(), head: stubEl(), getElementById: () => stubEl(), querySelector: () => stubEl(), querySelectorAll: () => [] };
+  globalThis.localStorage = { getItem: () => null, setItem() {}, removeItem() {} };
+}
+function uninstallGlobals() { for (const k of ["window", "document", "localStorage"]) delete globalThis[k]; }
+
+test("quiz mount 骨架不抛错且渲染三类入口", async () => {
+  installGlobals();
+  try {
+    const repo = new Repository(new MemoryAdapter());
+    const el = stubEl();
+    await quiz.mount(el, { repo, state: makeState(), app: { state: makeState(), refreshAccounts: async () => {} } });
+    await new Promise((r) => setTimeout(r, 40));
+    assert.ok(el.innerHTML.includes('data-el="cats"'), "应有分类栏锚点");
+    assert.ok(el.innerHTML.includes('data-el="main"'), "应有主内容锚点");
+  } finally { uninstallGlobals(); }
+});
