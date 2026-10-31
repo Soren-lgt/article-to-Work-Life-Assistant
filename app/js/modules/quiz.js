@@ -12,13 +12,19 @@ function esc(s) {
 
 // ---------- 可测纯函数：UI 片段 ----------
 // 顶部动作行：顺序练习、考试模式在新建题库左侧，三者挨在一起
-export function buildTopActionsHTML(qsCount = 0) {
-  const ok = qsCount > 0 ? '' : 'disabled';
+export function buildTopActionsHTML() {
   return `<span class="row" style="gap:6px;margin-left:auto">
-    <button class="btn" data-act="practice" ${ok}>顺序练习</button>
-    <button class="btn" data-act="examSetup" ${ok}>考试模式</button>
+    <button class="btn" data-act="practice">顺序练习</button>
+    <button class="btn" data-act="examSetup">考试模式</button>
     <button class="btn primary" data-act="newBank">新建题库</button>
   </span>`;
+}
+
+// 纯函数：开始训练/考试前的阻断原因；返回 null 表示可以开始
+export function startupBlockReason(bankId, questionCount) {
+  if (!bankId) return '请先在下方题库列表点击“进入”，选择一个题库再开始训练或考试。';
+  if (!(questionCount > 0)) return '当前题库还没有题目，请先在“当前题库题目”中点“+ 添加题目”。';
+  return null;
 }
 
 // 题库列表行：文本名称 + 进入按钮（右侧）+ 删除按钮（进入右侧）
@@ -119,11 +125,17 @@ export default {
         b.onclick = () => { v.cat = b.dataset.cat; v.bankId = null; v.screen = 'manage'; refresh(); };
       });
       const pb = catsBar.querySelector('[data-act="practice"]');
-      if (pb) pb.onclick = async () => { const list = await currentQuestions(); startRunner('practice', list); };
+      if (pb) pb.onclick = async () => {
+        const list = await currentQuestions();
+        const reason = startupBlockReason(v.bankId, list.length);
+        if (reason) { window.alert(reason); return; }
+        startRunner('practice', list);
+      };
       const eb = catsBar.querySelector('[data-act="examSetup"]');
       if (eb) eb.onclick = async () => {
         const list = await currentQuestions();
-        if (!list.length) return;
+        const reason = startupBlockReason(v.bankId, list.length);
+        if (reason) { window.alert(reason); return; }
         v.showSetup = !v.showSetup; renderSetup();
       };
       const nb = catsBar.querySelector('[data-act="newBank"]');

@@ -3,21 +3,26 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { MemoryAdapter, Repository } from "../js/lib/db.js";
 import { Quiz } from "../js/lib/quiz.js";
-import quiz, { buildTopActionsHTML, buildBankRowHTML, buildJudgeOptionHTML, buildChoiceOptionRowHTML, buildHistoryRowHTML, historyDetailHTML } from "../js/modules/quiz.js";
+import quiz, { buildTopActionsHTML, buildBankRowHTML, buildJudgeOptionHTML, buildChoiceOptionRowHTML, buildHistoryRowHTML, historyDetailHTML, startupBlockReason } from "../js/modules/quiz.js";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 const here = dirname(fileURLToPath(import.meta.url));
 const quizSrc = readFileSync(join(here, "..", "js/modules/quiz.js"), "utf8");
 
-test("顶部动作：顺序练习、考试模式在新建题库左侧且三者相邻，无题时禁用", () => {
-  const h = buildTopActionsHTML(3);
+test("顶部动作：顺序练习、考试模式在新建题库左侧且三者相邻，按钮恒可点击（不再被禁用静默无反应）", () => {
+  const h = buildTopActionsHTML();
   const i1 = h.indexOf("顺序练习");
   const i2 = h.indexOf("考试模式");
   const i3 = h.indexOf("新建题库");
   assert.ok(i1 >= 0 && i2 > i1 && i3 > i2, "顺序练习 < 考试模式 < 新建题库");
-  assert.ok(!buildTopActionsHTML(3).includes("disabled"));
-  assert.ok(buildTopActionsHTML(0).includes("disabled"));
+  assert.ok(!h.includes("disabled"), "顶部训练/考试按钮不应 disabled，点击应给出反馈");
+});
+
+test("R3-T6：startupBlockReason 区分未选题库 / 题库无题 / 可开始三态", () => {
+  assert.ok(startupBlockReason(null, 3), "未进入题库时给出引导");
+  assert.ok(startupBlockReason("b1", 0), "题库无题时给出提示");
+  assert.equal(startupBlockReason("b1", 3), null, "选题库且有题时可直接开始");
 });
 
 test("题库行：名称 + 进入按钮 + 进入右侧删除按钮", () => {
