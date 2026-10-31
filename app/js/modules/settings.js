@@ -3,6 +3,7 @@
 // 账号管理已收纳到顶栏“登录/账号名”弹窗（app.js），本页不再展示账号卡片。
 import { Backup } from '../lib/backup.js';
 import { Ledger } from '../lib/ledger.js';
+import { openModal, openConfirm, openPrompt, confirmMessageHTML } from '../ui/modal.js';
 
 const PREF_KEY = 'worklife.prefs';
 
@@ -104,15 +105,28 @@ function render(el, ctx) {
   fileInput.addEventListener('change', async () => {
     const file = fileInput.files && fileInput.files[0];
     if (!file) return;
-    const mode = window.confirm('点「确定」= 覆盖恢复（清空现有数据）；点「取消」= 合并导入（保留现有数据）。') ? 'replace' : 'merge';
-    try {
-      const text = await file.text();
-      const res = await Backup.importFromText(repo, text, { mode });
-      await app.refreshAccounts();
-      await refreshAll();
-      window.alert(`恢复完成，共导入 ${res.imported} 条记录。`);
-    } catch (e) { window.alert('恢复失败：' + e.message); }
-    fileInput.value = '';
+    const runImport = async (mode) => {
+      try {
+        const text = await file.text();
+        const res = await Backup.importFromText(repo, text, { mode });
+        await app.refreshAccounts();
+        await refreshAll();
+        window.alert(`恢复完成，共导入 ${res.imported} 条记录。`);
+      } catch (e) { window.alert('恢复失败：' + e.message); }
+      fileInput.value = '';
+    };
+    const ctlRestore = openModal({
+      title: '选择恢复方式', footer: false,
+      bodyHTML: confirmMessageHTML('点「覆盖恢复」= 清空现有数据后覆盖；点「合并导入」= 保留现有数据。') +
+        '<div class="row" style="gap:8px;justify-content:flex-end;margin-top:12px">' +
+        '<button class="btn" data-act="merge">合并导入</button>' +
+        '<button class="btn primary" data-act="replace">覆盖恢复</button></div>',
+      onDocument: (e) => {
+        const act = e.target && e.target.dataset ? e.target.dataset.act : null;
+        if (act === 'replace') { ctlRestore.close(); runImport('replace'); }
+        else if (act === 'merge') { ctlRestore.close(); runImport('merge'); }
+      },
+    });
   });
   bakRow.append(exportBtn, importBtn, fileInput);
   bakCard.appendChild(bakRow);
@@ -129,22 +143,37 @@ function render(el, ctx) {
     const b = document.createElement('button');
     b.className = 'btn'; b.textContent = `清空：${label}`;
     b.addEventListener('click', async () => {
-      if (!window.confirm(`确定清空「${label}」的全部数据？此操作不可撤销。`)) return;
-      await Backup.clearModule(repo, key);
-      await refreshAll();
-      window.alert('已清空。');
+      openConfirm({
+        title: '清空数据', confirmText: '清空',
+        message: `确定清空「${label}」的全部数据？此操作不可撤销。`,
+        onConfirm: async () => {
+          await Backup.clearModule(repo, key);
+          await refreshAll();
+          window.alert('已清空。');
+        },
+      });
     });
     cleanRow.appendChild(b);
   }
   const resetBtn = document.createElement('button');
   resetBtn.className = 'btn danger'; resetBtn.textContent = '整体重置（清空全部数据）';
   resetBtn.addEventListener('click', async () => {
-    if (!window.confirm('确定清空全部数据？这会删除所有账号、计划、记账、任务、题库与小组数据。')) return;
-    if (!window.confirm('再次确认：整体重置不可撤销，是否继续？')) return;
-    await Backup.resetAll(repo);
-    await app.refreshAccounts();
-    await refreshAll();
-    window.alert('已整体重置。');
+    openConfirm({
+      title: '整体重置', confirmText: '下一步',
+      message: '确定清空全部数据？这会删除所有账号、计划、记账、任务、题库与小组数据。',
+      onConfirm: () => {
+        openConfirm({
+          title: '再次确认', confirmText: '确定重置',
+          message: '再次确认：整体重置不可撤销，是否继续？',
+          onConfirm: async () => {
+            await Backup.resetAll(repo);
+            await app.refreshAccounts();
+            await refreshAll();
+            window.alert('已整体重置。');
+          },
+        });
+      },
+    });
   });
   cleanCard.append(cleanRow, resetBtn);
 
@@ -213,16 +242,26 @@ function render(el, ctx) {
       const rn = document.createElement('button');
       rn.className = 'btn'; rn.textContent = '改名';
       rn.addEventListener('click', async () => {
-        const n = window.prompt('新名称', c.name);
-        if (n == null) return;
-        try { await Ledger.renameCard(repo, c.id, n); await refreshCards(); } catch (e) { window.alert(e.message); }
+        openPrompt({
+          title: '改名', label: '新名称', placeholder: c.name, submitText: '保存',
+          onSubmit: async (n) => {
+            if (!String(n || '').trim()) return true;
+            try { await Ledger.renameCard(repo, c.id, n); await refreshCards(); } catch (e) { window.alert(e.message); }
+            return false;
+          },
+        });
       });
       const rm = document.createElement('button');
       rm.className = 'btn danger'; rm.textContent = '删除';
       rm.addEventListener('click', async () => {
-        if (!window.confirm('删除该卡片会同时删除其记录，确定？')) return;
-        await Ledger.removeCard(repo, c.id);
-        await refreshCards();
+        openConfirm({
+          title: '删除卡片', confirmText: '删除',
+          message: '删除该卡片会同时删除其记录，确定？',
+          onConfirm: async () => {
+            await Ledger.removeCard(repo, c.id);
+            await refreshCards();
+          },
+        });
       });
       row.append(label, rn, rm);
       cardBox.appendChild(row);

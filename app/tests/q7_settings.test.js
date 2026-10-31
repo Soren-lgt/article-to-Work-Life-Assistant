@@ -21,12 +21,12 @@ test("accountButtonLabel：未登录=登录，已登录=账号名", () => {
   assert.equal(accountButtonLabel("张三", true), "张三");
 });
 
-test("账号管理弹窗骨架：新建表单 + 列表容器", () => {
+test("账号管理弹窗骨架：登录/注册切换 + 动态面板 + 列表容器", () => {
   const h = accountManagerBodyHTML();
-  assert.ok(h.includes('data-f="name"'));
-  assert.ok(h.includes('data-f="pwd"'));
-  assert.ok(h.includes('data-act="create"'));
-  assert.ok(h.includes('data-el="list"'));
+  assert.ok(h.includes('data-act="tabLogin"'), "登录切换入口");
+  assert.ok(h.includes('data-act="tabRegister"'), "注册切换入口");
+  assert.ok(h.includes('data-el="panel"'), "动态表单面板");
+  assert.ok(h.includes('data-el="list"'), "账号列表容器保留");
 });
 
 test("账号列表：当前账号不显示登录按钮且带[当前]，其余账号含登录/改名/设密/删除", () => {

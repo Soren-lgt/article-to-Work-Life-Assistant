@@ -205,7 +205,12 @@ export default {
         link.href = a.content; link.download = a.name;
         document.body.appendChild(link); link.click(); link.remove();
       } else {
-        window.prompt('附件文本内容（可复制）', a.content || '');
+        const ctl = openModal({
+          title: '附件文本内容（可复制）', submitText: '关闭',
+          bodyHTML: '<div data-el="txt" style="white-space:pre-wrap;word-break:break-all"></div>',
+          onSubmit: async () => false,
+        });
+        ctl.body.querySelector('[data-el="txt"]').textContent = a.content || '';
       }
     }
 

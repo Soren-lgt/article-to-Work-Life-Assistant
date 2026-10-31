@@ -6,7 +6,7 @@ import { todayStr } from './lib/utils.js';
 import { Accounts } from './lib/accounts.js';
 import { Memo } from './lib/memo.js';
 import { Group } from './lib/group.js';
-import { openModal } from './ui/modal.js';
+import { openModal, openConfirm, openPrompt } from './ui/modal.js';
 import { loadPrefs, applyTheme, ensureThemeCss } from './modules/settings.js';
 import home from './modules/home.js';
 import today from './modules/today.js';
@@ -268,11 +268,16 @@ async function openAccountManager() {
           await finishSwitch();
         }
       } else if (act === 'rename') {
-        const n = window.prompt('新名称', e.target.dataset.name);
-        if (n == null) return;
-        await Accounts.rename(App.repo, id, n);
-        await refreshAccounts();
-        await refresh();
+        openPrompt({
+          title: '改名', label: '新名称', placeholder: e.target.dataset.name || '', submitText: '保存',
+          onSubmit: async (n) => {
+            if (!String(n || '').trim()) return true;
+            await Accounts.rename(App.repo, id, n);
+            await refreshAccounts();
+            await refresh();
+            return false;
+          },
+        });
       } else if (act === 'pwd') {
         const subCtl = openModal({
           title: '设置本地密码', submitText: '保存', cancelText: '取消',
@@ -286,10 +291,15 @@ async function openAccountManager() {
           },
         });
       } else if (act === 'del') {
-        if (!window.confirm('确认删除账号「' + e.target.dataset.name + '」？将同时清空其个人数据。')) return;
-        await Accounts.remove(App.repo, id);
-        await refreshAccounts();
-        await refresh();
+        openConfirm({
+          title: '删除账号', confirmText: '删除',
+          message: '确认删除账号「' + e.target.dataset.name + '」？将同时清空其个人数据。',
+          onConfirm: async () => {
+            await Accounts.remove(App.repo, id);
+            await refreshAccounts();
+            await refresh();
+          },
+        });
       } else if (act === 'logout') {
         AppState.set({ currentAccountId: null, loggedOut: true });
         await refreshAccounts();

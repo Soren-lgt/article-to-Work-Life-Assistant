@@ -18,6 +18,7 @@ export function openModal(options = {}) {
     footer = true,
     onSubmit = null,
     onClose = null,
+    onDocument = null,
   } = options;
 
   const overlay = doc.createElement("div");
@@ -48,6 +49,7 @@ export function openModal(options = {}) {
 
   const q = (sel) => overlay.querySelector(sel);
   overlay.addEventListener("mousedown", (e) => { if (isOverlayClick(overlay, e.target)) close(); });
+  if (typeof onDocument === "function") overlay.addEventListener("click", (e) => onDocument(e));
   const cancelBtn = q("[data-m-cancel]");
   const closeBtn = q("[data-m-close]");
   const submitBtn = q("[data-m-submit]");
@@ -62,5 +64,51 @@ export function openModal(options = {}) {
   });
 
   if (doc.body && typeof doc.body.appendChild === "function") doc.body.appendChild(overlay);
+  if (doc.body && typeof doc.body.appendChild === "function") doc.body.appendChild(overlay);
   return { close, overlay, body: q(".modal-body"), closed: () => closed };
+}
+
+// 纯函数：确认弹窗正文（保留原提示文本与格式，不增删内容）
+export function confirmMessageHTML(message = "") {
+  return `<div>${message}</div>`;
+}
+
+// 纯函数：输入弹窗字段；secret=true 为密文密码框
+export function promptFieldHTML(secret = false, placeholder = "") {
+  return `<input data-f="v" type="${secret ? "password" : "text"}" placeholder="${placeholder}">`;
+}
+
+// 便捷：确认弹窗（替代原生 confirm），点确认执行 onConfirm 后自动关闭
+export function openConfirm(options = {}) {
+  const { title = "提示", message = "", confirmText = "确定", cancelText = "取消", onConfirm = null } = options;
+  return openModal({
+    title,
+    submitText: confirmText,
+    cancelText,
+    bodyHTML: confirmMessageHTML(message),
+    onSubmit: async () => {
+      if (typeof onConfirm === "function") await onConfirm();
+      return false;
+    },
+  });
+}
+
+// 便捷：单输入弹窗（替代原生 prompt）；onSubmit(值) 返回 true 保持，false 关闭
+export function openPrompt(options = {}) {
+  const {
+    title = "输入", label = "", placeholder = "", secret = false,
+    submitText = "确定", onSubmit = null,
+  } = options;
+  const ctl = openModal({
+    title,
+    submitText,
+    cancelText: "取消",
+    bodyHTML: `<label>${label}</label>` + promptFieldHTML(secret, placeholder),
+    onSubmit: async () => {
+      const value = ctl.body.querySelector("[data-f=\"v\"]").value;
+      if (typeof onSubmit === "function") return Boolean(await onSubmit(value));
+      return false;
+    },
+  });
+  return ctl;
 }
