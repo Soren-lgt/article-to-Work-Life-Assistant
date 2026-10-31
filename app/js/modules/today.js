@@ -1,5 +1,5 @@
 // AI生成
-// 今日计划页：按天增删改/勾选、优先级、备注；日期切换；月度概览；新增任务走可靠模态弹窗
+// 今日计划页：按天增删改/勾选、优先级、备注；日期切换；月度概览；新增/编辑/删除均走可靠模态弹窗
 import { TodayPlan } from '../lib/todayplan.js';
 import { todayStr, monthStr } from '../lib/utils.js';
 import { openModal } from '../ui/modal.js';
@@ -12,7 +12,7 @@ function shiftDate(date, delta) {
   return `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}`;
 }
 function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, (c) => ({
+  return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
   }[c]));
 }
@@ -20,6 +20,25 @@ function escapeHtml(s) {
 // 纯函数：“今天”按钮文案——当天显示“今天”，非当天显示“返回今天”
 export function todayHomeButtonLabel(isToday) {
   return isToday ? '今天' : '返回今天';
+}
+
+// 纯函数：新增/编辑共用任务表单（标题 + 优先级 + 备注，编辑可改备注）
+export function taskFormHTML(prefill = {}) {
+  const v = (k) => escapeHtml(prefill[k] == null ? '' : prefill[k]);
+  const pri = prefill.priority || '中';
+  const opts = ['高', '中', '低'].map((p) => `<option ${p === pri ? 'selected' : ''}>${p}</option>`).join('');
+  return `
+    <label>任务标题</label>
+    <input data-f="title" value="${v('title')}" placeholder="要做什么？">
+    <label>优先级</label>
+    <select data-f="priority">${opts}</select>
+    <label>备注（可选）</label>
+    <input data-f="note" value="${v('note')}" placeholder="补充说明">`;
+}
+
+// 纯函数：删除确认弹窗正文
+export function confirmDeleteHTML(title) {
+  return `<div>确认删除「${escapeHtml(title)}」？此操作不可撤销。</div>`;
 }
 
 export default {
@@ -30,6 +49,7 @@ export default {
     let date = state.currentDate || todayStr();
     let view = 'day';
     let month = monthStr();
+    let currentRows = [];
 
     el.innerHTML = `
       <div class="card" style="margin-bottom:14px">
@@ -67,25 +87,52 @@ export default {
 
     function openAddModal() {
       const accId = state.currentAccountId;
-      if (!accId) { window.alert('请先在设置中创建并选择账号'); return; }
+      if (!accId) { window.alert('请先创建并登录账号'); return; }
       const ctl = openModal({
         title: '新增今日计划',
         submitText: '添加',
-        bodyHTML: `
-          <label>任务标题</label>
-          <input data-f="title" placeholder="要做什么？">
-          <label>优先级</label>
-          <select data-f="priority"><option>高</option><option selected>中</option><option>低</option></select>
-          <label>备注（可选）</label>
-          <input data-f="note" placeholder="补充说明">`,
-        onSubmit: async () => {
+        cancelText: '取消',
+        bodyHTML: taskFormHTML({}),
+        onSubmit: async (close) => {
           const title = ctl.body.querySelector('[data-f="title"]').value.trim();
-          if (!title) { window.alert('计划内容不能为空'); return true; } // 校验失败保持弹窗
+          if (!title) { window.alert('计划内容不能为空'); return true; }
           const priority = ctl.body.querySelector('[data-f="priority"]').value;
           const note = ctl.body.querySelector('[data-f="note"]').value.trim();
           await TodayPlan.add(repo, accId, { title, date, priority, note });
           await refresh();
-          return false; // 成功后自动关闭弹窗
+          return false;
+        },
+      });
+    }
+
+    function openEditModal(task) {
+      const ctl = openModal({
+        title: '编辑计划',
+        submitText: '保存',
+        cancelText: '取消',
+        bodyHTML: taskFormHTML(task),
+        onSubmit: async () => {
+          const title = ctl.body.querySelector('[data-f="title"]').value.trim();
+          if (!title) { window.alert('计划内容不能为空'); return true; }
+          const priority = ctl.body.querySelector('[data-f="priority"]').value;
+          const note = ctl.body.querySelector('[data-f="note"]').value.trim();
+          await TodayPlan.update(repo, task.id, { title, priority, note });
+          await refresh();
+          return false;
+        },
+      });
+    }
+
+    function openDeleteModal(task) {
+      const ctl = openModal({
+        title: '删除计划',
+        submitText: '删除',
+        cancelText: '取消',
+        bodyHTML: confirmDeleteHTML(task.title),
+        onSubmit: async () => {
+          await TodayPlan.remove(repo, task.id);
+          await refresh();
+          return false;
         },
       });
     }
@@ -95,6 +142,7 @@ export default {
       syncTodayButton();
       const accId = state.currentAccountId;
       const rows = accId ? await TodayPlan.listByDate(repo, accId, date) : [];
+      currentRows = rows;
       countEl.textContent = '共 ' + rows.length + ' 项（完成 ' + rows.filter((r) => r.done).length + '）';
       listEl.innerHTML = rows.length === 0
         ? '<div class="muted">这一天还没有计划。</div>'
@@ -107,7 +155,7 @@ export default {
               ${r.note ? `<span class="muted">· ${escapeHtml(r.note)}</span>` : ''}
             </label>
             <span class="row">
-              <button class="btn" data-op="edit" data-id="${r.id}" data-title="${escapeHtml(r.title)}">编辑</button>
+              <button class="btn" data-op="edit" data-id="${r.id}">编辑</button>
               <button class="btn danger" data-op="del" data-id="${r.id}">删除</button>
             </span>
           </div>`).join('');
@@ -151,10 +199,13 @@ export default {
       else if (act === 'add') { openAddModal(); }
       else if (act === 'toggleView') { view = view === 'day' ? 'month' : 'day'; await refresh(); }
       else if (op === 'toggle') { await TodayPlan.toggle(repo, id); await refresh(); }
-      else if (op === 'del') { if (window.confirm('确认删除该计划？')) { await TodayPlan.remove(repo, id); await refresh(); } }
+      else if (op === 'del') {
+        const t = currentRows.find((x) => x.id === id);
+        if (t) openDeleteModal(t);
+      }
       else if (op === 'edit') {
-        const t = window.prompt('修改内容', e.target.dataset.title);
-        if (t != null) { await TodayPlan.update(repo, id, { title: t }); await refresh(); }
+        const t = currentRows.find((x) => x.id === id);
+        if (t) openEditModal(t);
       }
     });
 

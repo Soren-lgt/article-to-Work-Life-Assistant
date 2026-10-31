@@ -3,7 +3,12 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { MemoryAdapter, Repository } from "../js/lib/db.js";
 import { Accounts } from "../js/lib/accounts.js";
-import today, { todayHomeButtonLabel } from "../js/modules/today.js";
+import today, { todayHomeButtonLabel, taskFormHTML, confirmDeleteHTML } from "../js/modules/today.js";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
+const here = dirname(fileURLToPath(import.meta.url));
+const todaySrc = readFileSync(join(here, "..", "js/modules/today.js"), "utf8");
 import { openModal, isOverlayClick } from "../js/ui/modal.js";
 
 test("todayHomeButtonLabel：当天=今天，非当天=返回今天", () => {
@@ -67,4 +72,29 @@ test("today 骨架：不再含（今天）后缀；添加任务按钮与月度�
     assert.ok(el.innerHTML.includes('data-act="toggleView"'), "应有月度概览按钮");
     assert.ok(el.innerHTML.includes("月度概览"), "月度概览文案存在");
   } finally { uninstallGlobals(); }
+});
+
+test("R3：任务表单纯函数含标题/优先级/备注，编辑可回显备注与优先级", () => {
+  const blank = taskFormHTML({});
+  assert.ok(blank.includes('data-f="title"'));
+  assert.ok(blank.includes('data-f="priority"'));
+  assert.ok(blank.includes('data-f="note"'), "表单应含备注输入框");
+  const filled = taskFormHTML({ title: "买药", priority: "高", note: "晚上买" });
+  assert.ok(filled.includes('value="买药"'));
+  assert.ok(filled.includes('value="晚上买"'));
+  assert.ok(filled.includes('<option selected>高</option>'));
+});
+
+test("R3：删除确认纯函数包含任务标题", () => {
+  const h = confirmDeleteHTML("买牛奶");
+  assert.ok(h.includes("买牛奶"));
+  assert.ok(h.includes("确认删除"));
+});
+
+test("R3：添加/编辑/删除均走可靠模态，不再使用原生 prompt/confirm", () => {
+  assert.ok(!todaySrc.includes("window.prompt"));
+  assert.ok(!todaySrc.includes("window.confirm"));
+  assert.equal((todaySrc.match(/const ctl = openModal/g) || []).length, 3, "添加/编辑/删除三处弹窗");
+  assert.ok(todaySrc.includes("openEditModal"));
+  assert.ok(todaySrc.includes("openDeleteModal"));
 });
