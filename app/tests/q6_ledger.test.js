@@ -129,3 +129,7 @@ test("R3-T9：新增消费/删除弹窗重挂载不重复绑定，取消一次�
   assert.ok(moduleSrc.includes("el.__clickHandler = onClick"), "处理器应命名保存");
   assert.ok(moduleSrc.includes("openModal"), "新增消费与删除确认均走可靠模态");
 });
+
+test("G1：每日消费卡片不再显示笔数，每卡每日只记一笔", () => {
+  assert.ok(!moduleSrc.includes("${c.count} 笔"), "卡片上不再渲染 N 笔");
+});

@@ -181,7 +181,6 @@ export default {
                 <button class="btn danger" data-op="delcard" data-id="${c.cardId}" data-name="${escapeHtml(c.name)}" style="padding:2px 6px;font-size:12px">删</button>
               </div>
               <div style="margin-top:8px">¥ ${yuan(c.total)}</div>
-              <div class="muted">${c.count} 笔</div>
             </div>`).join('')}
         </div>
         <div class="card" style="margin-top:14px"><strong>当天合计：¥ ${yuan(day.total)}</strong><span class="muted"> · ${day.count} 笔</span></div>`;

@@ -153,3 +153,15 @@ test("F3 替换边界：不同日期 / 不同卡片 / 不同账号互不覆盖",
   assert.equal((await Ledger.listByDate(r, "u1", "2026-10-30")).length, 1);
   assert.equal((await Ledger.listByDate(r, "u2", "2026-10-31")).length, 1);
 });
+
+test("G1 每个卡片每日只记一笔：同卡同日多次写入后该卡 count 恒为 1", async () => {
+  const r = makeRepo();
+  const [b] = await Ledger.ensureDefaultCards(r, "u1");
+  await Ledger.addRecord(r, "u1", { cardId: b.id, amount: 8, date: "2026-10-31" });
+  await Ledger.addRecord(r, "u1", { cardId: b.id, amount: 15, date: "2026-10-31" });
+  await Ledger.addRecord(r, "u1", { cardId: b.id, amount: 22, date: "2026-10-31" });
+  const byCard = await Ledger.dayByCard(r, "u1", "2026-10-31");
+  const row = byCard.find((c) => c.cardId === b.id);
+  assert.equal(row.count, 1, "每卡每日仅一条记录");
+  assert.equal(row.total, 22, "金额为最后一次替换值");
+});
