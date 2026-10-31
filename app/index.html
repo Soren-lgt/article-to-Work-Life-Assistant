@@ -1,0 +1,46 @@
+<!-- AI生成 -->
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>工作生活助手</title>
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <div id="app">
+    <aside class="sidebar">
+      <div class="brand">工作生活助手</div>
+      <nav class="nav">
+        <a href="#home" class="nav-item active" data-route="home">首页总览</a>
+        <a href="#today" class="nav-item" data-route="today">今日计划</a>
+        <a href="#devwork" class="nav-item" data-route="devwork">开发工作</a>
+        <a href="#group" class="nav-item" data-route="group">同组计划</a>
+        <a href="#quiz" class="nav-item" data-route="quiz">题库</a>
+        <a href="#ledger" class="nav-item" data-route="ledger">每日记账</a>
+        <a href="#settings" class="nav-item" data-route="settings">数据与设置</a>
+      </nav>
+    </aside>
+    <div class="main">
+      <header class="topbar">
+        <div class="topbar-title" id="pageTitle">首页总览</div>
+        <div class="topbar-right">
+          <input id="quickMemo" class="quick-memo" placeholder="快速备忘，回车保存" autocomplete="off">
+          <button id="notifyBell" class="bell" title="通知">通知<span class="badge" id="notifyBadge">0</span></button>
+          <select id="accountSwitch" class="account-switch" title="切换账号"></select>
+        </div>
+      </header>
+      <main class="content" id="content">
+        <section class="module" data-module="home"></section>
+        <section class="module" data-module="today" hidden></section>
+        <section class="module" data-module="devwork" hidden></section>
+        <section class="module" data-module="group" hidden></section>
+        <section class="module" data-module="quiz" hidden></section>
+        <section class="module" data-module="ledger" hidden></section>
+        <section class="module" data-module="settings" hidden></section>
+      </main>
+    </div>
+  </div>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,26 @@
+# ===== 运行时产物 / 日志 =====
+server.log
+*.log
+.server.pid
+.pytest.txt
+
+# ===== Office 临时锁文件 =====
+~$*
+
+# ===== 工具内部缓存 / 已废弃归档（不纳入版本库）=====
+.agent_history/
+.office-claw/
+_archive_deleted/
+
+# ===== IDE / 编辑器配置 =====
+.idea/
+.vscode/
+*.iml
+
+# ===== 操作系统杂项 =====
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# ===== Node 依赖（本项目零运行期依赖，预留）=====
+node_modules/

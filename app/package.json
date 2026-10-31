@@ -1,0 +1,19 @@
+{
+  "name": "work-life-app",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "工作生活助手 App - 本机运行的个人工作+生活管理工具",
+  "scripts": {
+    "test": "node --test",
+    "test:m0": "node --test tests/m0.test.js",
+    "test:m1": "node --test tests/m1.test.js",
+    "test:m2": "node --test tests/m2.test.js",
+    "test:m3": "node --test tests/m3.test.js",
+    "test:m4": "node --test tests/m4.test.js",
+    "test:m5": "node --test tests/m5.test.js",
+    "test:m6": "node --test tests/m6.test.js",
+    "test:m7": "node --test tests/m7.test.js",
+    "test:m8": "node --test tests/m8.test.js tests/m8_ui.test.js"
+  }
+}
