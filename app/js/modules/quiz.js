@@ -2,7 +2,10 @@
 // 题库模块：选择/问答/代码三类 → 题库（列表行：进入/删除）→ 题目；顺序练习/考试模式/新建题库同排；录题走可靠模态
 import { Quiz } from '../lib/quiz.js';
 import { gradeQuestion, filterWrong, accuracy } from '../lib/scoring.js';
-import { openModal } from '../ui/modal.js';
+import { openModal, openConfirm } from '../ui/modal.js';
+
+// T7：答题界面浮层句柄（邀请同款 openModal 承载）
+let runnerCtl = null;
 
 function esc(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({
@@ -96,6 +99,7 @@ export default {
   mount(el, ctx) {
     const { repo, state } = ctx;
     if (el.__timer) { clearInterval(el.__timer); el.__timer = null; }
+    if (runnerCtl) { try { runnerCtl.close(); } catch (e) {} runnerCtl = null; }
 
     const v = {
       cat: 'choice', bankId: null, screen: 'manage',
@@ -205,11 +209,16 @@ export default {
         b.onclick = () => { v.bankId = b.dataset.enter; refresh(); };
       });
       banksEl.querySelectorAll('[data-delbank]').forEach((b) => {
-        b.onclick = async () => {
-          if (!confirm('删除题库会同时删除其全部题目，确定？')) return;
-          await Quiz.removeBank(repo, b.dataset.delbank);
-          if (v.bankId === b.dataset.delbank) v.bankId = null;
-          refresh();
+        b.onclick = () => {
+          openConfirm({
+            title: '删除题库', confirmText: '删除',
+            message: '删除题库会同时删除其全部题目，确定？',
+            onConfirm: async () => {
+              await Quiz.removeBank(repo, b.dataset.delbank);
+              if (v.bankId === b.dataset.delbank) v.bankId = null;
+              refresh();
+            },
+          });
         };
       });
 
@@ -217,10 +226,15 @@ export default {
       if (addQ) addQ.onclick = openAddQuestionModal;
 
       main.querySelectorAll('[data-delq]').forEach((b) => {
-        b.onclick = async () => {
-          if (!confirm('确定删除该题目？')) return;
-          await Quiz.removeQuestion(repo, b.dataset.delq);
-          refresh();
+        b.onclick = () => {
+          openConfirm({
+            title: '删除题目', confirmText: '删除',
+            message: '确定删除该题目？',
+            onConfirm: async () => {
+              await Quiz.removeQuestion(repo, b.dataset.delq);
+              refresh();
+            },
+          });
         };
       });
 
@@ -389,9 +403,24 @@ export default {
     }
 
     // ---------- 答题运行 ----------
+    function openRunnerModal() {
+      if (runnerCtl) return;
+      runnerCtl = openModal({
+        title: v.mode === 'exam' ? '考试模式' : '顺序练习',
+        footer: false,
+        bodyHTML: '<div data-el="rbody"></div>',
+      });
+    }
+
+    function closeRunner() {
+      if (el.__timer) { clearInterval(el.__timer); el.__timer = null; }
+      if (runnerCtl) { try { runnerCtl.close(); } catch (e) {} runnerCtl = null; }
+    }
+
     function startRunner(mode, qs) {
       v.mode = mode; v.qs = qs; v.i = 0; v.ans = {}; v.fb = {}; v.results = [];
       v.screen = 'runner'; v.startedAt = Date.now();
+      openRunnerModal();
       refresh();
     }
 
@@ -438,55 +467,54 @@ export default {
     }
 
     function collectAnswer(q) {
+      const scope = runnerCtl ? runnerCtl.body : main;
       if (q.categoryKey === 'choice') {
-        const nodes = main.querySelectorAll('[name="opt"]:checked');
+        const nodes = scope.querySelectorAll('[name="opt"]:checked');
         const vals = Array.from(nodes).map((n) => n.value);
         return q.type === 'multiple' ? vals : (vals[0] || '');
       }
-      const ta = main.querySelector('[data-ans]');
+      const ta = scope.querySelector('[data-ans]');
       return ta ? ta.value : '';
     }
 
     function renderRunner() {
       const q = v.qs[v.i];
-      main.innerHTML = questionHtml(q);
+      if (!runnerCtl) openRunnerModal();
+      const body = runnerCtl.body.querySelector('[data-el="rbody"]');
+      body.innerHTML = questionHtml(q);
       if (v.mode === 'exam') {
         if (el.__timer) clearInterval(el.__timer);
         const tick = () => {
           const left = Math.max(0, Math.round((v.deadline - Date.now()) / 1000));
-          const badge = main.querySelector('[data-el="clock"]');
+          const badge = body.querySelector('[data-el="clock"]');
           if (badge) badge.textContent = `剩余 ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`;
           if (left <= 0) { clearInterval(el.__timer); el.__timer = null; finishExam(); }
         };
-        main.querySelector('.card').insertAdjacentHTML('afterbegin', '<div data-el="clock" class="muted"></div>');
+        body.querySelector('.card').insertAdjacentHTML('afterbegin', '<div data-el="clock" class="muted"></div>');
         tick();
         el.__timer = setInterval(tick, 1000);
       }
-      main.querySelector('[data-act="prev"]').onclick = () => { v.ans[v.i] = collectAnswer(q); v.i--; refresh(); };
-      main.querySelector('[data-act="next"]').onclick = () => { v.ans[v.i] = collectAnswer(q); v.i++; refresh(); };
-      const chk = main.querySelector('[data-act="check"]');
+      body.querySelector('[data-act="prev"]').onclick = () => { v.ans[v.i] = collectAnswer(q); v.i--; refresh(); };
+      body.querySelector('[data-act="next"]').onclick = () => { v.ans[v.i] = collectAnswer(q); v.i++; refresh(); };
+      const chk = body.querySelector('[data-act="check"]');
       if (chk) chk.onclick = () => {
         v.ans[v.i] = collectAnswer(q);
         const r = gradeQuestion(q, v.ans[v.i]);
         v.fb[v.i] = { correct: r.correct, hit: r.hit, total: r.total };
         refresh();
       };
-      const fin = main.querySelector('[data-act="finish"]');
+      const fin = body.querySelector('[data-act="finish"]');
       if (fin) fin.onclick = () => finish(false);
-      const sub = main.querySelector('[data-act="submit"]');
-      if (sub) sub.onclick = () => { if (confirm('确定交卷？')) finishExam(); };
-      const qt = main.querySelector('[data-act="quit"]');
-      if (qt) qt.onclick = () => {
-        if (el.__timer) { clearInterval(el.__timer); el.__timer = null; }
-        v.screen = 'manage';
-        refresh();
-      };
+      const sub = body.querySelector('[data-act="submit"]');
+      if (sub) sub.onclick = () => { openConfirm({ title: '交卷确认', message: '确定交卷？', confirmText: '交卷', onConfirm: () => finishExam() }); };
+      const qt = body.querySelector('[data-act="quit"]');
+      if (qt) qt.onclick = () => { closeRunner(); v.screen = 'manage'; refresh(); };
     }
 
     function finishExam() { v.ans[v.i] = collectAnswer(v.qs[v.i]); finish(true); }
 
     async function finish(asExam) {
-      if (el.__timer) { clearInterval(el.__timer); el.__timer = null; }
+      closeRunner();
       let score = 0;
       const startedAt = v.startedAt || Date.now();
       v.results = v.qs.map((q, idx) => {

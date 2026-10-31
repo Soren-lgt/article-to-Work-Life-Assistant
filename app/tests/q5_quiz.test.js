@@ -147,3 +147,13 @@ test("R6：历史明细为只读，展示题干/我的答案/参考答案", () =
 test("R6：练习/考试界面提供退出入口，不局限于结束训练/交卷", () => {
   assert.ok(quizSrc.includes('data-act="quit"'), "答题界面应有退出按钮");
 });
+
+test("R3-T7：答题界面由 openModal 浮层承载，操作按钮内容保持不变", () => {
+  assert.ok(quizSrc.includes("openRunnerModal"), "答题启动打开模态浮层");
+  assert.ok(quizSrc.includes("runnerCtl"), "浮层句柄统一管理");
+  assert.ok(!quizSrc.includes("main.innerHTML = questionHtml"), "题目不再渲染进页面主区");
+  for (const act of ["prev", "next", "check", "quit", "finish", "submit"]) {
+    assert.ok(quizSrc.includes(`data-act="${act}"`), `保留操作 ${act}`);
+  }
+  assert.ok(quizSrc.includes("openConfirm"), "交卷确认走同款模态");
+});

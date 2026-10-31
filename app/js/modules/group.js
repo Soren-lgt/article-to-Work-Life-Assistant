@@ -2,7 +2,7 @@
 // 同组计划模块：小组切换 / 项目看板 / 成员与入组（10位数字加入码、按名字邀请）/ 日志 / 通知 / 附件（成员下载、本人删除）
 import { Group, Task, roleOf, buildJoinCode, parseJoinCode, findGroupByJoinCode } from '../lib/group.js';
 import { Accounts } from '../lib/accounts.js';
-import { openModal } from '../ui/modal.js';
+import { openModal, openConfirm, openPrompt } from '../ui/modal.js';
 
 function esc(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({
@@ -108,11 +108,20 @@ export default {
       plist.querySelectorAll('[data-p]').forEach((b) => { b.onclick = () => { v.projectId = b.dataset.p; refresh(); }; });
 
       const np = pane.querySelector('[data-act="newProject"]');
-      if (np) np.onclick = async () => {
-        const name = prompt('项目名称：'); if (name == null) return;
-        const deadline = prompt('截止时间（可留空，如 2026-12-31）：') || null;
-        try { await Task.addProject(repo, v.groupId, state.currentAccountId, { name, deadline }); refresh(); }
-        catch (e) { alert(e.message); }
+      if (np) np.onclick = () => {
+        const ctl = openModal({
+          title: '新建项目', submitText: '创建', cancelText: '取消',
+          bodyHTML: `<label class="acc-field"><span>项目名称</span><input data-f="pname"></label>
+            <label class="acc-field"><span>截止时间（可留空，如 2026-12-31）</span><input data-f="pdead"></label>`,
+          onSubmit: async () => {
+            const name = ctl.body.querySelector('[data-f="pname"]').value;
+            const deadline = ctl.body.querySelector('[data-f="pdead"]').value || null;
+            if (!String(name || '').trim()) return true;
+            try { await Task.addProject(repo, v.groupId, state.currentAccountId, { name, deadline }); refresh(); }
+            catch (e) { alert(e.message); return true; }
+            return false;
+          },
+        });
       };
 
       const board = pane.querySelector('[data-el="board"]');
@@ -193,9 +202,13 @@ export default {
         try { await Task.rejectTask(repo, v.groupId, state.currentAccountId, b.dataset.reject); refresh(); } catch (e) { alert(e.message); }
       });
       board.querySelectorAll('[data-att]').forEach((b) => b.onclick = () => openAttachModal(b.dataset.att));
-      board.querySelectorAll('[data-deltask]').forEach((b) => b.onclick = async () => {
-        if (!confirm('删除该任务？')) return;
-        try { await Task.removeTask(repo, v.groupId, state.currentAccountId, b.dataset.deltask); refresh(); } catch (e) { alert(e.message); }
+      board.querySelectorAll('[data-deltask]').forEach((b) => b.onclick = () => {
+        openConfirm({
+          title: '删除任务', confirmText: '删除', message: '删除该任务？',
+          onConfirm: async () => {
+            try { await Task.removeTask(repo, v.groupId, state.currentAccountId, b.dataset.deltask); refresh(); } catch (e) { alert(e.message); }
+          },
+        });
       });
     }
 
@@ -238,10 +251,14 @@ export default {
         try { const a = await Task.downloadAttachment(repo, me, b.dataset.dl); triggerDownload(a); }
         catch (e) { window.alert(e.message); }
       });
-      ctl.body.querySelectorAll('[data-delatt]').forEach((b) => b.onclick = async () => {
-        if (!confirm('删除自己上传的该附件？')) return;
-        try { await Task.removeAttachment(repo, me, b.dataset.dl); ctl.close(); await refresh(); }
-        catch (e) { window.alert(e.message); }
+      ctl.body.querySelectorAll('[data-delatt]').forEach((b) => b.onclick = () => {
+        openConfirm({
+          title: '删除附件', confirmText: '删除', message: '删除自己上传的该附件？',
+          onConfirm: async () => {
+            try { await Task.removeAttachment(repo, me, b.dataset.dl); ctl.close(); await refresh(); }
+            catch (e) { window.alert(e.message); }
+          },
+        });
       });
     }
 
@@ -305,11 +322,13 @@ export default {
 
       const call = { 'data-mdep': (id) => Group.setDeputy(repo, v.groupId, state.currentAccountId, id), 'data-rprev': (id) => Group.removeDeputy(repo, v.groupId, state.currentAccountId, id), 'data-rm': (id) => Group.removeMember(repo, v.groupId, state.currentAccountId, id), 'data-trans': (id) => Group.transferOwner(repo, v.groupId, id) };
       for (const [attr, fn] of Object.entries(call)) {
-        pane.querySelectorAll(`[${attr}]`).forEach((b) => b.onclick = async () => {
+        pane.querySelectorAll(`[${attr}]`).forEach((b) => b.onclick = () => {
           const id = b.getAttribute(attr);
           const labels = { 'data-mdep': '设为副组长？', 'data-rprev': '撤销副组长？', 'data-rm': '移除成员？', 'data-trans': '转让组长？你将变为普通成员。' };
-          if (!confirm(labels[attr])) return;
-          try { await fn(id); refresh(); } catch (e) { alert(e.message); }
+          openConfirm({
+            title: '成员操作', confirmText: '确定', message: labels[attr],
+            onConfirm: async () => { try { await fn(id); refresh(); } catch (e) { alert(e.message); } },
+          });
         });
       }
       pane.querySelectorAll('[data-approve]').forEach((b) => b.onclick = async () => { await Group.handleJoinRequest(repo, v.groupId, state.currentAccountId, b.dataset.approve, true); refresh(); });
@@ -320,7 +339,14 @@ export default {
         const g = await Group.get(repo, v.groupId);
         const code = buildJoinCode(g);
         try { await navigator.clipboard.writeText(code); alert('加入码已复制：' + code + '（10位数字），发给组员在「加入小组」粘贴即可申请。'); }
-        catch (e) { prompt('加入码（复制给组员，10位数字）', code); }
+        catch (e) {
+          const ccCtl = openModal({
+            title: '加入码（复制给组员，10位数字）', submitText: '关闭',
+            bodyHTML: '<div data-el="cc" style="word-break:break-all"></div>',
+            onSubmit: async () => false,
+          });
+          ccCtl.body.querySelector('[data-el="cc"]').textContent = code;
+        }
       };
 
       // 邀请：按对方名字选择本机账号（弹窗可可靠关闭）
@@ -349,9 +375,14 @@ export default {
       };
 
       const dg = pane.querySelector('[data-act="delGroup"]');
-      if (dg) dg.onclick = async () => {
-        if (!confirm('删除小组将清除其全部项目、任务与日志，确定？')) return;
-        try { await Group.deleteGroup(repo, v.groupId, state.currentAccountId); v.groupId = null; refresh(); } catch (e) { alert(e.message); }
+      if (dg) dg.onclick = () => {
+        openConfirm({
+          title: '删除小组', confirmText: '删除',
+          message: '删除小组将清除其全部项目、任务与日志，确定？',
+          onConfirm: async () => {
+            try { await Group.deleteGroup(repo, v.groupId, state.currentAccountId); v.groupId = null; refresh(); } catch (e) { alert(e.message); }
+          },
+        });
       };
     }
 
@@ -375,23 +406,34 @@ export default {
       pane.querySelectorAll('[data-read]').forEach((b) => b.onclick = async () => { await Group.markNotificationRead(repo, b.dataset.read); refresh(); if (typeof state.emit === 'function') state.emit(); });
     }
 
-    el.querySelector('[data-act="newGroup"]').onclick = async () => {
-      const name = prompt('小组名称：'); if (name == null) return;
-      try { const g = await Group.create(repo, name, state.currentAccountId); v.groupId = g.id; state.set({ currentGroupId: g.id }); refresh(); }
-      catch (e) { alert(e.message); }
+    el.querySelector('[data-act="newGroup"]').onclick = () => {
+      openPrompt({
+        title: '新建小组', label: '小组名称', submitText: '创建',
+        onSubmit: async (name) => {
+          if (!String(name || '').trim()) return true;
+          try { const g = await Group.create(repo, name, state.currentAccountId); v.groupId = g.id; state.set({ currentGroupId: g.id }); refresh(); }
+          catch (e) { alert(e.message); return true; }
+          return false;
+        },
+      });
     };
-    el.querySelector('[data-act="joinGroup"]').onclick = async () => {
-      const input = prompt('粘贴 10 位数字加入码，或直接输入小组ID：'); if (input == null) return;
-      let gid = parseJoinCode(input);
-      if (gid) {
-        const g = await findGroupByJoinCode(repo, gid);
-        if (!g) { alert('加入码无效或已失效'); return; }
-        gid = g.id;
-      } else {
-        gid = String(input).trim();
-      }
-      try { await Group.requestJoin(repo, gid, { accountId: state.currentAccountId }); alert('申请已提交，等待组长/副组长审核'); }
-      catch (e) { alert(e.message); }
+    el.querySelector('[data-act="joinGroup"]').onclick = () => {
+      openPrompt({
+        title: '加入小组', label: '粘贴 10 位数字加入码，或直接输入小组ID：', submitText: '申请加入',
+        onSubmit: async (input) => {
+          let gid = parseJoinCode(input);
+          if (gid) {
+            const g = await findGroupByJoinCode(repo, gid);
+            if (!g) { alert('加入码无效或已失效'); return true; }
+            gid = g.id;
+          } else {
+            gid = String(input || '').trim();
+          }
+          try { await Group.requestJoin(repo, gid, { accountId: state.currentAccountId }); alert('申请已提交，等待组长/副组长审核'); }
+          catch (e) { alert(e.message); return true; }
+          return false;
+        },
+      });
     };
 
     refresh();

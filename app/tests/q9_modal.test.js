@@ -42,8 +42,8 @@ test("T5：全工程 js 源码不再使用原生 window.confirm / window.prompt"
   const jsDir = join(appDir, "js");
   for (const fp of walk(jsDir)) {
     const src = read(fp.replace(appDir + "\\", "").replaceAll("\\", "/"));
-    assert.ok(!src.includes("window.confirm"), `${fp} 仍含 window.confirm`);
-    assert.ok(!src.includes("window.prompt"), `${fp} 仍含 window.prompt`);
+    assert.ok(!/(^|[^\w.])confirm\(/.test(src), `${fp} 仍含原生 confirm()`);
+    assert.ok(!/(^|[^\w.])prompt\(/.test(src), `${fp} 仍含原生 prompt()`);
   }
 });
 
