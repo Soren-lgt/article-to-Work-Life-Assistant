@@ -197,6 +197,7 @@ export default {
             <div class="row" style="gap:8px;padding:6px 0;border-bottom:1px solid var(--line)">
               <span class="muted">${i + 1}.</span>
               <span style="flex:1">${esc(q.stem)}</span>
+              <button class="btn" data-editq="${q.id}">编辑</button>
               <button class="btn" data-delq="${q.id}" style="color:#c00">删除</button>
             </div>`).join('') : '<span class="muted">此题库暂无题目。</span>'}</div>
         </div>` : ''}
@@ -234,6 +235,14 @@ export default {
               refresh();
             },
           });
+        };
+      });
+
+      main.querySelectorAll('[data-editq]').forEach((b) => {
+        b.onclick = async () => {
+          const qs = await currentQuestions();
+          const q = qs.find((x) => x.id === b.dataset.editq);
+          if (q) openEditQuestionModal(q);
         };
       });
 
@@ -306,6 +315,60 @@ export default {
         },
       });
       bindQuestionForm(cat, ctl);
+    }
+
+    // F2：编辑题目——复用题目表单并回显原值，提交走 updateQuestion
+    function openEditQuestionModal(q) {
+      const cat = q.categoryKey;
+      const ctl = openModal({
+        title: '编辑题目', submitText: '保存修改',
+        bodyHTML: buildQuestionForm(cat),
+        onSubmit: async () => {
+          const data = collectQuestion(cat, ctl);
+          if (data.__error) { window.alert(data.__error); return true; }
+          try { await Quiz.updateQuestion(repo, q.id, data); }
+          catch (e) { window.alert(e.message); return true; }
+          await refresh();
+          return false;
+        },
+      });
+      bindQuestionForm(cat, ctl);
+      prefillQuestion(cat, ctl, q);
+    }
+
+    function prefillQuestion(cat, ctl, q) {
+      const g = (k) => ctl.body.querySelector(`[data-f="${k}"]`);
+      g('stem').value = q.stem || '';
+      if (cat === 'choice') {
+        const typeSel = g('type');
+        typeSel.value = q.type || 'single';
+        renderChoiceOptions(ctl, typeSel.value);
+        if (typeSel.value === 'judge') {
+          const pick = ctl.body.querySelector(`input[name="jok"][value="${q.answer}"]`);
+          if (pick) pick.checked = true;
+        } else {
+          const list = ctl.body.querySelector('[data-optlist]');
+          list.innerHTML = '';
+          const ansSet = new Set(Array.isArray(q.answer) ? q.answer : [q.answer]);
+          (q.options || []).forEach((text) => {
+            list.insertAdjacentHTML('beforeend', buildChoiceOptionRowHTML());
+            const row = list.lastElementChild;
+            row.querySelector('[data-opttext]').value = text;
+            const mark = row.querySelector('[data-optok]');
+            mark.type = typeSel.value === 'multiple' ? 'checkbox' : 'radio';
+            row.querySelector('[data-rowdel]').onclick = () => row.remove();
+            if (ansSet.has(text)) mark.checked = true;
+          });
+        }
+        if (g('analysis')) g('analysis').value = q.analysis || '';
+      } else if (cat === 'qa') {
+        g('answer').value = q.answer || '';
+        g('keywords').value = (q.keywords || []).join(',');
+      } else {
+        g('lang').value = q.lang || '';
+        g('refCode').value = q.refCode || '';
+        g('hint').value = q.hint || '';
+      }
     }
 
     function buildQuestionForm(cat) {

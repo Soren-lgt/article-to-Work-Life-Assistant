@@ -165,3 +165,10 @@ test("F1：考试模式从全部题库汇总随机抽题，不再限于当前库
   assert.ok(seg.includes("listAllQuestions"), "开始考试取全部题库题目");
   assert.ok(seg.includes("drawQuestions"), "随机抽取");
 });
+
+test("F2：题目提供编辑入口，弹窗回显并调用 updateQuestion 保存", () => {
+  assert.ok(quizSrc.includes("data-editq="), "题目行含编辑按钮");
+  assert.ok(quizSrc.includes("openEditQuestionModal"), "定义编辑弹窗");
+  assert.ok(quizSrc.includes("Quiz.updateQuestion"), "保存走数据层更新方法");
+  assert.ok(quizSrc.includes("prefillQuestion"), "编辑表单回显原值");
+});

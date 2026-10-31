@@ -182,3 +182,32 @@ test("F1 考试跨库抽题：从汇总列表随机抽取且不重复", async ()
   assert.equal(drawn.length, 4);
   assert.equal(new Set(drawn.map((q) => q.id)).size, 4);
 });
+
+test("F2 updateQuestion 可改题干/选项/答案/解析并保留归属与创建时间", async () => {
+  const r = makeRepo();
+  const bank = await Quiz.addBank(r, "u1", "choice", "X");
+  const q = await Quiz.addQuestion(r, bank.id, { stem: "旧题干", type: "single", options: ["A", "B"], answer: "A" });
+  const before = { id: q.id, bankId: q.bankId, accountId: q.accountId, createdAt: q.createdAt };
+  const up = await Quiz.updateQuestion(r, q.id, { stem: "新题干", options: ["A1", "B1"], answer: "B1", analysis: "新解析" });
+  assert.equal(up.stem, "新题干");
+  assert.deepEqual(up.options, ["A1", "B1"]);
+  assert.equal(up.answer, "B1");
+  assert.equal(up.analysis, "新解析");
+  assert.equal(up.id, before.id);
+  assert.equal(up.bankId, before.bankId);
+  assert.equal(up.accountId, before.accountId);
+  assert.equal(up.createdAt, before.createdAt);
+});
+
+test("F2 updateQuestion 空题干报错；不存在题目报错；问答类可改关键词", async () => {
+  const r = makeRepo();
+  const cb = await Quiz.addBank(r, "u1", "choice", "C");
+  const cq = await Quiz.addQuestion(r, cb.id, { stem: "x", type: "judge", answer: "对" });
+  await assert.rejects(() => Quiz.updateQuestion(r, cq.id, { stem: "   " }), /题干不能为空/);
+  await assert.rejects(() => Quiz.updateQuestion(r, "nope", { stem: "y" }), /题目不存在/);
+  const qb = await Quiz.addBank(r, "u1", "qa", "Q");
+  const qq = await Quiz.addQuestion(r, qb.id, { stem: "什么是列表", answer: "a", keywords: ["旧"] });
+  const qu = await Quiz.updateQuestion(r, qq.id, { answer: "新答案", keywords: ["新1", "新2"] });
+  assert.equal(qu.answer, "新答案");
+  assert.deepEqual(qu.keywords, ["新1", "新2"]);
+});

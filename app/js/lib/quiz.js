@@ -88,6 +88,32 @@ export const Quiz = {
 
   async removeQuestion(repo, id) { return repo.remove('question', id); },
 
+  // F2：编辑题目——保留 id/bankId/accountId/categoryKey/createdAt，仅更新可编辑字段
+  async updateQuestion(repo, id, data = {}) {
+    const q = await repo.get('question', id);
+    if (!q) throw new Error('题目不存在');
+    const next = { ...q };
+    if (data.stem != null) {
+      const stem = String(data.stem).trim();
+      if (!stem) throw new Error('题干不能为空');
+      next.stem = stem;
+    }
+    if (q.categoryKey === 'choice') {
+      if (data.type) next.type = data.type;
+      if (Array.isArray(data.options)) next.options = data.options;
+      if (data.answer != null) next.answer = data.answer;
+      if (data.analysis != null) next.analysis = String(data.analysis);
+    } else if (q.categoryKey === 'qa') {
+      if (data.answer != null) next.answer = String(data.answer);
+      if (Array.isArray(data.keywords)) next.keywords = data.keywords;
+    } else {
+      if (data.lang != null) next.lang = String(data.lang);
+      if (data.refCode != null) next.refCode = String(data.refCode);
+      if (data.hint != null) next.hint = String(data.hint);
+    }
+    return repo.put('question', next);
+  },
+
   // ---------- 抽题 ----------
   drawQuestions(questions, n, rng = Math.random) {
     const arr = [...questions];
