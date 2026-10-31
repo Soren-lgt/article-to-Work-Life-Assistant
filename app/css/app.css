@@ -204,3 +204,6 @@ html, body {
 
 .ledger-card { transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease; }
 .ledger-card:hover { transform: translateY(-3px); box-shadow: 0 8px 20px rgba(47, 111, 237, .14); border-color: var(--primary); }
+
+.auth-tabs { display: flex; gap: 8px; margin-bottom: 10px; }
+.auth-tabs .btn { flex: 1; }

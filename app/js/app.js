@@ -31,26 +31,53 @@ export function accountButtonLabel(currentName, loggedIn) {
   return loggedIn && currentName ? currentName : '登录';
 }
 
-// 纯函数：账号管理弹窗静态骨架（账号名/密码上下排列，创建按钮居中于下方 + 列表容器）
-export function accountManagerBodyHTML() {
-  return `
-    <div class="acc-form">
-      <label class="acc-field"><span>新账号名称</span>
-        <input data-f="name" placeholder="新账号名称">
-      </label>
-      <label class="acc-field"><span>可选本地密码</span>
-        <input data-f="pwd" type="password" placeholder="可选本地密码">
-      </label>
-      <div class="acc-form-actions">
-        <button class="btn primary" data-act="create">创建账号</button>
-      </div>
-    </div>
-    <div data-el="list"></div>`;
+// 纯函数：密码输入框（密文，type=password），data 名与占位文案可配
+export function passwordFieldHTML(placeholder = "请输入密码", dataF = "pwd") {
+  return `<input data-f="${dataF}" type="password" autocomplete="new-password" placeholder="${placeholder}">`;
 }
 
-// 纯函数：密码输入框（密文，type=password），占位文案可配
-export function passwordFieldHTML(placeholder = "请输入密码") {
-  return `<input data-f="pwd" type="password" autocomplete="new-password" placeholder="${placeholder}">`;
+// 纯函数：登录面板——选择账号 + 密文密码 + 登录按钮
+export function loginPanelHTML(accounts = []) {
+  const opts = accounts.length
+    ? accounts.map((a) => `<option value="${a.id}">${escapeHtml(a.name)}${a.passwordHash ? '（已设密）' : ''}</option>`).join('')
+    : '<option value="">暂无账号，请先点“注册”创建</option>';
+  return `
+    <label class="acc-field"><span>账号</span>
+      <select data-f="loginUser">${opts}</select>
+    </label>
+    <label class="acc-field"><span>密码（设有密码的账号需填写）</span>
+      ${passwordFieldHTML('账号密码', 'loginPwd')}
+    </label>
+    <div class="acc-form-actions">
+      <button class="btn primary" data-act="doLogin">登录</button>
+    </div>`;
+}
+
+// 纯函数：注册面板——名称 + 密文密码 + 创建 + 返回登录
+export function registerPanelHTML() {
+  return `
+    <label class="acc-field"><span>新账号名称</span>
+      <input data-f="name" placeholder="新账号名称">
+    </label>
+    <label class="acc-field"><span>可选本地密码</span>
+      ${passwordFieldHTML('可选本地密码', 'pwd')}
+    </label>
+    <div class="acc-form-actions">
+      <button class="btn primary" data-act="create">注册并创建</button>
+      <button class="btn" data-act="tabLogin">返回登录</button>
+    </div>`;
+}
+
+// 纯函数：账号管理弹窗骨架——顶部“登录/注册”切换 + 动态面板 + 下方账号列表
+export function accountManagerBodyHTML() {
+  return `
+    <div class="auth-tabs">
+      <button class="btn primary" data-act="tabLogin">登录</button>
+      <button class="btn" data-act="tabRegister">注册</button>
+    </div>
+    <div data-el="panel" class="acc-form"></div>
+    <hr style="border:none;border-top:1px solid var(--line);margin:10px 0">
+    <div data-el="list"></div>`;
 }
 
 // 纯函数：账号列表行（当前账号不显示“登录”，显示当前标记；含改名/设密码/删除）
@@ -178,23 +205,47 @@ async function openAccountManager() {
   });
   if (!ctl) return;
 
+  let mode = 'login';
   async function refresh() {
     App.accounts = await Accounts.list(App.repo);
     const list = ctl.body.querySelector('[data-el="list"]');
     list.innerHTML = accountListHTML(App.accounts, AppState.currentAccountId);
+  }
+  function renderPanel() {
+    const panel = ctl.body.querySelector('[data-el="panel"]');
+    if (panel) panel.innerHTML = mode === 'register' ? registerPanelHTML() : loginPanelHTML(App.accounts);
+    ctl.overlay.querySelectorAll('[data-act="tabLogin"],[data-act="tabRegister"]').forEach((b) => {
+      b.classList.toggle('primary', b.dataset.act === (mode === 'register' ? 'tabRegister' : 'tabLogin'));
+    });
   }
 
   ctl.overlay.addEventListener('click', async (e) => {
     const act = e.target.dataset.act;
     const id = e.target.dataset.id;
     try {
-      if (act === 'create') {
+      if (act === 'tabLogin') { mode = 'login'; renderPanel(); }
+      else if (act === 'tabRegister') { mode = 'register'; renderPanel(); }
+      else if (act === 'doLogin') {
+        const sel = ctl.body.querySelector('[data-f="loginUser"]');
+        const id = sel && sel.value;
+        if (!id) { window.alert('请选择要登录的账号'); return; }
+        const acc = App.accounts.find((a) => a.id === id);
+        if (acc && acc.passwordHash) {
+          const pwd = ctl.body.querySelector('[data-f="loginPwd"]').value;
+          if (!await Accounts.verify(App.repo, id, pwd)) { window.alert('密码错误'); return; }
+        }
+        AppState.set({ currentAccountId: id, loggedOut: false });
+        await refreshAccounts();
+        await refresh();
+      } else if (act === 'create') {
         const name = ctl.body.querySelector('[data-f="name"]').value;
         const pwd = ctl.body.querySelector('[data-f="pwd"]').value;
         await Accounts.create(App.repo, { name, password: pwd });
         AppState.set({ loggedOut: false });
         await refreshAccounts();
         await refresh();
+        mode = 'login';
+        renderPanel();
       } else if (act === 'switch') {
         const acc = App.accounts.find((a) => a.id === id);
         const finishSwitch = async () => {
@@ -248,6 +299,7 @@ async function openAccountManager() {
   });
 
   refresh();
+  renderPanel();
 }
 
 function bindTopbar() {

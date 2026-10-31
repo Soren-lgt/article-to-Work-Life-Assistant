@@ -7,6 +7,7 @@ import { dirname, join } from "node:path";
 import {
   logoutButtonVisible, logoutActionButtonHTML, shouldAutoLogin,
   accountButtonLabel, accountManagerBodyHTML, accountListHTML, passwordFieldHTML,
+  loginPanelHTML, registerPanelHTML,
 } from "../js/app.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -46,10 +47,23 @@ test("账号列表：仅当前账号行渲染退出按钮", () => {
   assert.ok(html.indexOf('data-id="a"') < html.indexOf('data-act="logout"') || html.includes('data-act="logout"'));
 });
 
-test("账号弹窗骨架为纵向表单且不再使用底部退出条", () => {
+test("R3-T1：账号弹窗先显示登录区，并列“注册”入口，切换到注册表单", () => {
   const h = accountManagerBodyHTML();
-  assert.ok(h.includes("acc-form"));
+  const li = h.indexOf('data-act="tabLogin"');
+  const ri = h.indexOf('data-act="tabRegister"');
+  assert.ok(li >= 0 && ri > li, "登录按钮在注册按钮之前且并列");
+  assert.ok(h.includes('data-el="panel"'), "动态面板容器");
+  assert.ok(h.includes('data-el="list"'), "账号列表容器保留");
   assert.ok(!h.includes('data-el="logout"'));
+});
+
+test("R3-T1：登录面板含账号选择与密文密码；注册面板含名称与密文密码", () => {
+  const lh = loginPanelHTML([{ id: "a", name: "甲", passwordHash: "x" }]);
+  assert.ok(lh.includes('data-f="loginUser"'), "登录需选择账号");
+  assert.ok(lh.includes('data-f="loginPwd"') && lh.includes('type="password"'), "登录密码密文");
+  const rh = registerPanelHTML();
+  assert.ok(rh.includes('data-f="name"'), "注册需名称");
+  assert.ok(rh.includes('data-f="pwd"') && rh.includes('type="password"'), "注册密码密文");
 });
 
 test("app.js：账号弹窗关闭底部按钮、退出置 loggedOut 且刷新", () => {
