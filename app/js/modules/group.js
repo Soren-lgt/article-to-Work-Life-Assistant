@@ -1,7 +1,8 @@
 // AI生成
-// 同组计划模块：小组切换 / 项目看板 / 成员与入组（加入码） / 日志 / 通知 / 文件附件
-import { Group, Task, roleOf, buildJoinCode, parseJoinCode } from '../lib/group.js';
+// 同组计划模块：小组切换 / 项目看板 / 成员与入组（10位数字加入码、按名字邀请）/ 日志 / 通知 / 附件（成员下载、本人删除）
+import { Group, Task, roleOf, buildJoinCode, parseJoinCode, findGroupByJoinCode } from '../lib/group.js';
 import { Accounts } from '../lib/accounts.js';
+import { openModal } from '../ui/modal.js';
 
 function esc(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({
@@ -125,16 +126,41 @@ export default {
           </div>
         </div>`;
 
+      // 新建任务：可靠模态，含标题/描述/指派人/截止时间
       const nt = board.querySelector('[data-act="newTask"]');
       if (nt) nt.onclick = async () => {
-        const title = prompt('任务标题：'); if (title == null) return;
-        const desc = prompt('描述（可留空）：') || '';
-        let assignee = prompt('指派给成员账号ID（可留空）：') || null;
-        try { await Task.addTask(repo, v.groupId, state.currentAccountId, { projectId: v.projectId, title, desc, assigneeAccountId: assignee }); refresh(); }
-        catch (e) { alert(e.message); }
+        const members = await Group.listMembers(repo, v.groupId);
+        const me = state.currentAccountId;
+        const assigneeOpts = members
+          .filter((m) => m.accountId !== me)
+          .map((m) => {
+            const acc = members.find((x) => x.accountId === m.accountId);
+            return `<option value="${m.accountId}">${esc(m.name || m.accountId)}</option>`;
+          }).join('');
+        const ctl = openModal({
+          title: '新建任务',
+          submitText: '创建',
+          bodyHTML: `
+            <label>任务标题</label><input data-f="title" placeholder="任务标题">
+            <label>描述（可留空）</label><textarea data-f="desc" rows="3" placeholder="补充说明"></textarea>
+            <label>指派给（可留空）</label>
+            <select data-f="assignee"><option value="">不指派</option>${assigneeOpts}</select>
+            <label>截止时间（可留空）</label><input type="date" data-f="deadline">`,
+          onSubmit: async () => {
+            const title = ctl.body.querySelector('[data-f="title"]').value.trim();
+            if (!title) { window.alert('任务标题不能为空'); return true; }
+            const desc = ctl.body.querySelector('[data-f="desc"]').value.trim();
+            const assignee = ctl.body.querySelector('[data-f="assignee"]').value || null;
+            const deadline = ctl.body.querySelector('[data-f="deadline"]').value || null;
+            try {
+              await Task.addTask(repo, v.groupId, state.currentAccountId, { projectId: v.projectId, title, desc, assigneeAccountId: assignee, deadline });
+            } catch (e) { window.alert(e.message); return true; }
+            await refresh();
+            return false;
+          },
+        });
       };
 
-      // 上传附件：优先选择真实文件（存为 Base64 DataURL）
       board.querySelectorAll('[data-upload]').forEach((b) => b.onclick = () => {
         if (!fileInput) {
           fileInput = document.createElement('input');
@@ -160,15 +186,51 @@ export default {
       board.querySelectorAll('[data-reject]').forEach((b) => b.onclick = async () => {
         try { await Task.rejectTask(repo, v.groupId, state.currentAccountId, b.dataset.reject); refresh(); } catch (e) { alert(e.message); }
       });
-      board.querySelectorAll('[data-att]').forEach((b) => b.onclick = async () => {
-        const atts = await Task.listAttachments(repo, b.dataset.att);
-        alert(atts.length ? atts.map((a) => a.content && String(a.content).startsWith('data:')
-          ? `· ${a.name}（已上传文件）`
-          : `· ${a.name}: ${a.content}`).join('\n') : '暂无附件');
-      });
+      board.querySelectorAll('[data-att]').forEach((b) => b.onclick = () => openAttachModal(b.dataset.att));
       board.querySelectorAll('[data-deltask]').forEach((b) => b.onclick = async () => {
         if (!confirm('删除该任务？')) return;
         try { await Task.removeTask(repo, v.groupId, state.currentAccountId, b.dataset.deltask); refresh(); } catch (e) { alert(e.message); }
+      });
+    }
+
+    function triggerDownload(a) {
+      if (a.content && String(a.content).startsWith('data:')) {
+        const link = document.createElement('a');
+        link.href = a.content; link.download = a.name;
+        document.body.appendChild(link); link.click(); link.remove();
+      } else {
+        window.prompt('附件文本内容（可复制）', a.content || '');
+      }
+    }
+
+    // 查看附件：其他成员可下载；上传者本人可删除自己的附件
+    async function openAttachModal(taskId) {
+      const atts = await Task.listAttachments(repo, taskId);
+      const me = state.currentAccountId;
+      const rows = atts.map((a) => {
+        const mine = a.uploadedBy === me;
+        return `<div class="row" style="justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line)">
+          <span style="flex:1">${esc(a.name)}</span>
+          <span class="row" style="gap:6px">
+            <button class="btn" data-dl="${a.id}">下载</button>
+            ${mine ? `<button class="btn danger" data-delatt="${a.id}">删除</button>` : ''}
+          </span>
+        </div>`;
+      }).join('');
+      const ctl = openModal({
+        title: '任务附件',
+        submitText: '关闭',
+        bodyHTML: rows || '<div class="muted">暂无附件</div>',
+        onSubmit: () => false,
+      });
+      ctl.body.querySelectorAll('[data-dl]').forEach((b) => b.onclick = async () => {
+        try { const a = await Task.downloadAttachment(repo, me, b.dataset.dl); triggerDownload(a); }
+        catch (e) { window.alert(e.message); }
+      });
+      ctl.body.querySelectorAll('[data-delatt]').forEach((b) => b.onclick = async () => {
+        if (!confirm('删除自己上传的该附件？')) return;
+        try { await Task.removeAttachment(repo, me, b.dataset.dl); ctl.close(); await refresh(); }
+        catch (e) { window.alert(e.message); }
       });
     }
 
@@ -185,6 +247,7 @@ export default {
       return `<div class="card" style="padding:8px;margin-bottom:6px">
         <div>${esc(t.title)}${badge}</div>
         ${t.desc ? `<div class="muted" style="margin-top:4px">${esc(t.desc)}</div>` : ''}
+        ${t.deadline ? `<div class="muted" style="margin-top:4px">截止：${esc(t.deadline)}</div>` : ''}
         <div class="row" style="gap:6px;flex-wrap:wrap;margin-top:6px">${actions.join('')}</div>
       </div>`;
     }
@@ -202,7 +265,7 @@ export default {
             <strong>成员（${members.length}）</strong>
             <span class="row" style="gap:6px">
               ${CAN_MANAGE.includes(role) ? '<button class="btn" data-act="copyCode">复制加入码</button>' : ''}
-              ${CAN_MANAGE.includes(role) ? '<button class="btn primary" data-act="invite">+ 邀请本机账号</button>' : ''}
+              ${CAN_MANAGE.includes(role) ? '<button class="btn primary" data-act="invite">+ 邀请</button>' : ''}
             </span>
           </div>
           <div style="margin-top:8px">${members.map((m) => `
@@ -229,7 +292,7 @@ export default {
         </div>` : ''}
         ${role === 'owner' ? '<div class="card"><button class="btn" data-act="delGroup" style="color:#c00">删除小组</button></div>' : ''}`;
 
-      const call = { 'data-mdep': (id) => Group.setDeputy(repo, v.groupId, state.currentAccountId, id), 'data-rprev': (id) => Group.removeDeputy(repo, v.groupId, state.currentAccountId, id), 'data-rm': (id) => Group.removeMember(repo, v.groupId, state.currentAccountId, id), 'data-trans': (id) => Group.transferOwner(repo, v.groupId, state.currentAccountId, id) };
+      const call = { 'data-mdep': (id) => Group.setDeputy(repo, v.groupId, state.currentAccountId, id), 'data-rprev': (id) => Group.removeDeputy(repo, v.groupId, state.currentAccountId, id), 'data-rm': (id) => Group.removeMember(repo, v.groupId, state.currentAccountId, id), 'data-trans': (id) => Group.transferOwner(repo, v.groupId, id) };
       for (const [attr, fn] of Object.entries(call)) {
         pane.querySelectorAll(`[${attr}]`).forEach((b) => b.onclick = async () => {
           const id = b.getAttribute(attr);
@@ -243,16 +306,37 @@ export default {
 
       const cc = pane.querySelector('[data-act="copyCode"]');
       if (cc) cc.onclick = async () => {
-        const code = buildJoinCode(v.groupId);
-        try { await navigator.clipboard.writeText(code); alert('加入码已复制：' + code + '，发给组员在「加入小组」粘贴即可申请。'); }
-        catch (e) { prompt('加入码（复制给组员）', code); }
+        const g = await Group.get(repo, v.groupId);
+        const code = buildJoinCode(g);
+        try { await navigator.clipboard.writeText(code); alert('加入码已复制：' + code + '（10位数字），发给组员在「加入小组」粘贴即可申请。'); }
+        catch (e) { prompt('加入码（复制给组员，10位数字）', code); }
       };
+
+      // 邀请：按对方名字选择本机账号（弹窗可可靠关闭）
       const inv = pane.querySelector('[data-act="invite"]');
       if (inv) inv.onclick = async () => {
-        const accId = prompt('要邀请的本机账号ID：'); if (accId == null) return;
-        try { await Group.invite(repo, v.groupId, state.currentAccountId, { accountId: accId, name: nameOf(accId) }); refresh(); }
-        catch (e) { alert(e.message); }
+        const all = await Accounts.list(repo);
+        const taken = new Set(members.map((m) => m.accountId));
+        const candidates = all.filter((a) => !taken.has(a.id));
+        const opts = candidates.length
+          ? candidates.map((a) => `<option value="${a.id}">${esc(a.name)}（${a.id}）</option>`).join('')
+          : '<option value="">暂无可邀请的本机账号</option>';
+        const ctl = openModal({
+          title: '邀请伙伴（按名字选择）',
+          submitText: '邀请',
+          bodyHTML: `<label>选择伙伴姓名</label><select data-f="acc">${opts}</select>`,
+          onSubmit: async () => {
+            const accId = ctl.body.querySelector('[data-f="acc"]').value;
+            if (!accId) { window.alert('请选择要邀请的伙伴'); return true; }
+            const acc = candidates.find((a) => a.id === accId);
+            try { await Group.invite(repo, v.groupId, state.currentAccountId, { accountId: accId, name: acc ? acc.name : '' }); }
+            catch (e) { window.alert(e.message); return true; }
+            await refresh();
+            return false;
+          },
+        });
       };
+
       const dg = pane.querySelector('[data-act="delGroup"]');
       if (dg) dg.onclick = async () => {
         if (!confirm('删除小组将清除其全部项目、任务与日志，确定？')) return;
@@ -286,8 +370,15 @@ export default {
       catch (e) { alert(e.message); }
     };
     el.querySelector('[data-act="joinGroup"]').onclick = async () => {
-      const input = prompt('粘贴加入码（WL-开头）或直接输入小组ID：'); if (input == null) return;
-      const gid = parseJoinCode(input) || String(input).trim();
+      const input = prompt('粘贴 10 位数字加入码，或直接输入小组ID：'); if (input == null) return;
+      let gid = parseJoinCode(input);
+      if (gid) {
+        const g = await findGroupByJoinCode(repo, gid);
+        if (!g) { alert('加入码无效或已失效'); return; }
+        gid = g.id;
+      } else {
+        gid = String(input).trim();
+      }
       try { await Group.requestJoin(repo, gid, { accountId: state.currentAccountId }); alert('申请已提交，等待组长/副组长审核'); }
       catch (e) { alert(e.message); }
     };

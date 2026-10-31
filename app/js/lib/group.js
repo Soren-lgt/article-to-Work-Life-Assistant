@@ -1,5 +1,5 @@
 // AI生成
-// 同组计划业务逻辑（小组 / 成员 / 入组 / 项目 / 任务状态机 / 日志 / 通知）
+// 同组计划业务逻辑（小组 / 成员 / 入组 / 项目 / 任务状态机 / 日志 / 通知 / 附件）
 export const ROLES = { owner: '组长', deputy: '副组长', member: '成员' };
 export const TASK_STATUS = { todo: '待办', review: '待审核', done: '已完成' };
 
@@ -19,7 +19,6 @@ async function writeLog(repo, groupId, actorAccountId, action, detail) {
   return repo.put('opLog', { groupId, actorAccountId, action, detail, createdAt: nowTs() });
 }
 
-// 向组内指定角色成员发通知
 async function notifyRoles(repo, groupId, roles, title, body, excludeAccountId) {
   const members = await repo.list('groupMember', (m) => m.groupId === groupId && roles.includes(m.role));
   for (const m of members) {
@@ -28,12 +27,54 @@ async function notifyRoles(repo, groupId, roles, title, body, excludeAccountId) 
   }
 }
 
+// ---------- 加入码：10 位纯数字 ----------
+export function generateJoinCode(rng = Math.random) {
+  let code = String(1 + Math.floor(rng() * 9)); // 首位非 0
+  for (let i = 1; i < 10; i += 1) code += Math.floor(rng() * 10);
+  return code;
+}
+
+export function isValidJoinCode(code) {
+  return /^\d{10}$/.test(String(code || '').trim());
+}
+
+// buildJoinCode 接收 group 对象返回其 10 位数字加入码；也兼容直接传入已有码字符串
+export function buildJoinCode(group) {
+  if (group && typeof group === 'object') return group.joinCode || '';
+  return String(group || '').trim();
+}
+
+// parseJoinCode 仅接受 10 位数字；非法返回 null
+export function parseJoinCode(code) {
+  const c = String(code || '').trim();
+  return isValidJoinCode(c) ? c : null;
+}
+
+export async function findGroupByJoinCode(repo, code) {
+  const c = String(code || '').trim();
+  if (!isValidJoinCode(c)) return null;
+  const all = await repo.all('group');
+  return all.find((g) => g.joinCode === c) || null;
+}
+
+// 按对方名字在本机账号中定位账号（精确优先，唯一包含匹配次之）
+export function resolveAccountByName(accs, text) {
+  const q = String(text || '').trim();
+  if (!q || !Array.isArray(accs)) return null;
+  const exact = accs.find((a) => a.name === q);
+  if (exact) return exact;
+  const hits = accs.filter((a) => (a.name || '').includes(q));
+  return hits.length === 1 ? hits[0] : null;
+}
+
 export const Group = {
   ROLES,
   async create(repo, name, ownerAccountId) {
     const n = String(name || '').trim();
     if (!n) throw new Error('小组名称不能为空');
-    const g = await repo.put('group', { name: n, ownerAccountId, createdAt: nowTs() });
+    let joinCode = generateJoinCode();
+    while (await findGroupByJoinCode(repo, joinCode)) joinCode = generateJoinCode();
+    const g = await repo.put('group', { name: n, ownerAccountId, joinCode, createdAt: nowTs() });
     await repo.put('groupMember', { groupId: g.id, accountId: ownerAccountId, role: 'owner', joinedAt: nowTs() });
     await writeLog(repo, g.id, ownerAccountId, 'group.create', `创建小组「${n}」`);
     return g;
@@ -122,7 +163,7 @@ export const Group = {
     if (!accountId) throw new Error('请选择要邀请的账号');
     if (await roleOf(repo, groupId, accountId)) throw new Error('该账号已在小组中');
     await repo.put('groupMember', { groupId, accountId, role: 'member', joinedAt: nowTs(), name: name || '' });
-    await writeLog(repo, groupId, actorAccountId, 'member.invite', `邀请成员 ${accountId}`);
+    await writeLog(repo, groupId, actorAccountId, 'member.invite', `邀请成员 ${name || accountId}`);
     await repo.put('notification', { groupId, toAccountId: accountId, title: '你已被邀请加入小组', body: '你已成为小组成员', read: false, createdAt: nowTs() });
   },
 
@@ -191,15 +232,16 @@ export const Task = {
     await writeLog(repo, groupId, actorAccountId, 'project.remove', `删除项目 ${projectId}`);
   },
 
-  async addTask(repo, groupId, actorAccountId, { projectId, title, desc = '', assigneeAccountId = null } = {}) {
+  async addTask(repo, groupId, actorAccountId, { projectId, title, desc = '', assigneeAccountId = null, deadline = null } = {}) {
     assertRole(await roleOf(repo, groupId, actorAccountId), ['owner', 'deputy'], '只有组长或副组长可以分配任务');
     const t = String(title || '').trim();
     if (!t) throw new Error('任务标题不能为空');
     const task = await repo.put('task', {
       groupId, projectId: projectId || null, title: t, desc: String(desc || ''),
+      deadline: deadline || null,
       assigneeAccountId: assigneeAccountId || null, status: 'todo', createdBy: actorAccountId, createdAt: nowTs(), updatedAt: nowTs(),
     });
-    await writeLog(repo, groupId, actorAccountId, 'task.create', `创建任务「${t}」`);
+    await writeLog(repo, groupId, actorAccountId, 'task.create', `创建任务「${t}」${deadline ? `（截止 ${deadline}）` : ''}`);
     if (assigneeAccountId) {
       await repo.put('notification', { groupId, toAccountId: assigneeAccountId, title: '有任务分配给你', body: t, read: false, createdAt: nowTs() });
     }
@@ -231,6 +273,23 @@ export const Task = {
     return repo.list('attachment', (a) => a.taskId === taskId).then((rs) => rs.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0)));
   },
 
+  // 小组成员可读取（下载）附件；仅上传者本人可删除
+  async downloadAttachment(repo, actorAccountId, attachmentId) {
+    const a = await repo.get('attachment', attachmentId);
+    if (!a) throw new Error('附件不存在');
+    const role = await roleOf(repo, a.groupId, actorAccountId);
+    if (!role) throw new Error('你不在该小组中，无法下载附件');
+    return a;
+  },
+
+  async removeAttachment(repo, actorAccountId, attachmentId) {
+    const a = await repo.get('attachment', attachmentId);
+    if (!a) throw new Error('附件不存在');
+    if (a.uploadedBy !== actorAccountId) throw new Error('只能删除自己上传的附件');
+    await repo.remove('attachment', attachmentId);
+    return true;
+  },
+
   // 通用状态变更入口（成员本人不可改）
   async setTaskStatus(repo, groupId, actorAccountId, taskId, status) {
     assertRole(await roleOf(repo, groupId, actorAccountId), ['owner', 'deputy'], '成员不能修改任务状态');
@@ -255,15 +314,3 @@ export const Task = {
     await writeLog(repo, groupId, actorAccountId, 'task.remove', `删除任务 ${taskId}`);
   },
 };
-// ---------- 加入码（方案 A 纯前端：组长复制加入码 → 他人粘贴申请加入）----------
-// 生成小组加入码
-export function buildJoinCode(groupId) {
-  if (!groupId) return '';
-  return 'WL-' + groupId;
-}
-
-// 解析加入码，非法格式返回 null
-export function parseJoinCode(code) {
-  const m = /^WL-([\s\S]+)$/.exec(String(code || '').trim());
-  return m ? m[1].trim() : null;
-}

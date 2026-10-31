@@ -180,16 +180,21 @@ test('组间隔离：不同小组数据互不干扰', async () => {
   assert.deepEqual(TASK_STATUS.todo, '待办');
 });
 
-test("加入码往返：组长生成 → 成员解析并申请入组成功", async () => {
-  const { buildJoinCode, parseJoinCode } = await import("../js/lib/group.js");
+test("加入码为10位数字：生成/校验/按码查找小组并申请入组", async () => {
+  const { generateJoinCode, isValidJoinCode, buildJoinCode, parseJoinCode, findGroupByJoinCode } = await import("../js/lib/group.js");
+  assert.match(generateJoinCode(), /^\d{10}$/);
+  assert.equal(isValidJoinCode("1234567890"), true);
+  assert.equal(isValidJoinCode("WL-abc"), false);
   const { r, g } = await setup();
-  const code = buildJoinCode(g.id);
-  assert.match(code, /^WL-/);
-  const gid = parseJoinCode(code);
-  assert.equal(gid, g.id);
+  assert.match(g.joinCode, /^\d{10}$/);
+  const code = buildJoinCode(g);
+  assert.match(code, /^\d{10}$/);
+  assert.equal(parseJoinCode(code), code);
   assert.equal(parseJoinCode(""), null);
   assert.equal(parseJoinCode("abc"), null);
-  const req = await Group.requestJoin(r, gid, { accountId: "joiner", name: "申请员" });
+  const found = await findGroupByJoinCode(r, code);
+  assert.equal(found.id, g.id);
+  const req = await Group.requestJoin(r, g.id, { accountId: "joiner", name: "申请员" });
   assert.equal(req.status, "pending");
   await Group.handleJoinRequest(r, g.id, "owner1", req.id, true);
   assert.equal(await roleOf(r, g.id, "joiner"), "member");
