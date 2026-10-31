@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import {
   logoutButtonVisible, logoutActionButtonHTML, shouldAutoLogin,
-  accountButtonLabel, accountManagerBodyHTML, accountListHTML,
+  accountButtonLabel, accountManagerBodyHTML, accountListHTML, passwordFieldHTML,
 } from "../js/app.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -64,4 +64,16 @@ test("modal.js 支持 footer 选项关闭底部按钮区", () => {
   const src = read("js/ui/modal.js");
   assert.ok(src.includes("footer = true"));
   assert.ok(src.includes("modal-foot"));
+});
+
+test("R3-T2：密码输入框统一为密文 type=password", () => {
+  const h = passwordFieldHTML("请输入密码");
+  assert.ok(h.includes('type="password"'), "密码框必须隐藏显示");
+  assert.ok(!h.includes('type="text"'));
+});
+
+test("R3-T2：切换登录校验与设置密码不再使用明文 prompt", () => {
+  const src = read("js/app.js");
+  assert.ok(!src.includes("window.prompt('请输入该账号本地密码')"), "切换登录密码走密文模态而非原生 prompt");
+  assert.ok(!src.includes("window.prompt('新的本地密码"), "设置密码走密文模态而非原生 prompt");
 });

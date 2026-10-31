@@ -48,6 +48,11 @@ export function accountManagerBodyHTML() {
     <div data-el="list"></div>`;
 }
 
+// 纯函数：密码输入框（密文，type=password），占位文案可配
+export function passwordFieldHTML(placeholder = "请输入密码") {
+  return `<input data-f="pwd" type="password" autocomplete="new-password" placeholder="${placeholder}">`;
+}
+
 // 纯函数：账号列表行（当前账号不显示“登录”，显示当前标记；含改名/设密码/删除）
 export function accountListHTML(accounts, currentId) {
   if (!accounts.length) return '<div class="muted">还没有账号，先在上方创建一个。</div>';
@@ -192,13 +197,25 @@ async function openAccountManager() {
         await refresh();
       } else if (act === 'switch') {
         const acc = App.accounts.find((a) => a.id === id);
+        const finishSwitch = async () => {
+          AppState.set({ currentAccountId: id, loggedOut: false });
+          await refreshAccounts();
+          await refresh();
+        };
         if (acc && acc.passwordHash) {
-          const p = window.prompt('请输入该账号本地密码') || '';
-          if (!await Accounts.verify(App.repo, id, p)) { window.alert('密码错误'); return; }
+          const subCtl = openModal({
+            title: '验证登录', submitText: '登录', cancelText: '取消',
+            bodyHTML: `<label>账号密码（密文输入）</label>${passwordFieldHTML('请输入该账号本地密码')}`,
+            onSubmit: async () => {
+              const p = subCtl.body.querySelector('[data-f="pwd"]').value;
+              if (!await Accounts.verify(App.repo, id, p)) { window.alert('密码错误'); return true; }
+              await finishSwitch();
+              return false;
+            },
+          });
+        } else {
+          await finishSwitch();
         }
-        AppState.set({ currentAccountId: id, loggedOut: false });
-        await refreshAccounts();
-        await refresh();
       } else if (act === 'rename') {
         const n = window.prompt('新名称', e.target.dataset.name);
         if (n == null) return;
@@ -206,11 +223,17 @@ async function openAccountManager() {
         await refreshAccounts();
         await refresh();
       } else if (act === 'pwd') {
-        const p = window.prompt('新的本地密码（留空表示清除密码）', '');
-        if (p == null) return;
-        await Accounts.setPassword(App.repo, id, p);
-        await refreshAccounts();
-        await refresh();
+        const subCtl = openModal({
+          title: '设置本地密码', submitText: '保存', cancelText: '取消',
+          bodyHTML: `<label>新密码（留空表示清除密码，密文输入）</label>${passwordFieldHTML('留空表示清除密码')}`,
+          onSubmit: async () => {
+            const v = subCtl.body.querySelector('[data-f="pwd"]').value;
+            await Accounts.setPassword(App.repo, id, v);
+            await refreshAccounts();
+            await refresh();
+            return false;
+          },
+        });
       } else if (act === 'del') {
         if (!window.confirm('确认删除账号「' + e.target.dataset.name + '」？将同时清空其个人数据。')) return;
         await Accounts.remove(App.repo, id);
