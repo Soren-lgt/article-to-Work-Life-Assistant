@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 const here = dirname(fileURLToPath(import.meta.url));
 const homeSrc = readFileSync(join(here, "..", "js/modules/home.js"), "utf8");
+const cssSrc = readFileSync(join(here, "..", "css/app.css"), "utf8");
 
 test("home 模块契约：route/title/mount 齐全", () => {
   assert.equal(home.route, "home");
@@ -39,4 +40,12 @@ test("R2：首页卡片移除查看全部/去记账等文字链接，容器使�
   assert.ok(!homeSrc.includes("去记账"), "不应再有点记账链接");
   assert.ok(homeSrc.includes('class="home-grid"'), "应使用自适应网格类");
   assert.equal((homeSrc.match(/data-goto=/g) || []).length, 4, "四张功能卡跳转锚点保留");
+});
+
+test("R3-T3：首页四卡上下各两个（两列网格）且左右间距一致", () => {
+  const grid = cssSrc.match(/\.home-grid\s*\{[^}]*\}/)[0];
+  assert.ok(grid.includes("grid-template-columns: 1fr 1fr"), "应为两等宽列");
+  assert.ok(grid.includes("gap: 14px"), "行列间距统一");
+  const card = cssSrc.match(/\.home-grid \.nav-card\s*\{[^}]*\}/)[0];
+  assert.ok(card.includes("width: 100%"), "卡片占满列宽以保证对齐");
 });

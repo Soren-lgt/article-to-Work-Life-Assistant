@@ -199,8 +199,8 @@ html, body {
 .acc-field input { padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--text); }
 .acc-form-actions { display: flex; justify-content: center; margin-top: 4px; }
 
-.home-grid { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-start; }
-.home-grid .nav-card { flex: 0 1 auto; width: auto; min-width: 240px; max-width: 340px; height: auto; }
+.home-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: stretch; }
+.home-grid .nav-card { width: 100%; min-width: 0; max-width: none; height: auto; }
 
 .ledger-card { transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease; }
 .ledger-card:hover { transform: translateY(-3px); box-shadow: 0 8px 20px rgba(47, 111, 237, .14); border-color: var(--primary); }
