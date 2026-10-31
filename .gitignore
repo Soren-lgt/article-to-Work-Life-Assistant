@@ -24,3 +24,6 @@ desktop.ini
 
 # ===== Node 依赖（本项目零运行期依赖，预留）=====
 node_modules/
+# ===== Electron 桌面构建产物（不入库）=====
+desktop/dist/
+desktop/dist-win/

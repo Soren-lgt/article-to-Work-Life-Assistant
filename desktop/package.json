@@ -1,0 +1,29 @@
+{
+  "name": "worklife-desktop",
+  "version": "1.0.0",
+  "private": true,
+  "author": "worklife",
+  "main": "main.js",
+  "description": "工作生活助手 Electron 桌面壳（内嵌静态服务加载 app/，不改业务代码）",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win dir"
+  },
+  "devDependencies": {
+    "electron": "33.2.1",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.worklife.workassistant",
+    "productName": "工作生活助手",
+    "electronVersion": "33.2.1",
+    "electronDist": "node_modules/electron/dist",
+    "directories": { "output": "dist-win" },
+    "files": [ "main.js", "package.json" ],
+    "extraResources": [ { "from": "../app", "to": "app" } ],
+    "win": {
+      "target": [ "dir" ],
+      "signAndEditExecutable": false
+    }
+  }
+}

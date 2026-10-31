@@ -8,6 +8,7 @@ import { dirname, join } from 'node:path';
 import { MemoryAdapter, Repository } from '../js/lib/db.js';
 import { Accounts } from '../js/lib/accounts.js';
 import { TodayPlan } from '../js/lib/todayplan.js';
+import { todayStr } from '../js/lib/utils.js';
 import { Ledger } from '../js/lib/ledger.js';
 import { DevWork } from '../js/lib/devwork.js';
 import { Quiz } from '../js/lib/quiz.js';
@@ -60,7 +61,7 @@ test('联调：账号 → 今日计划 → 记账 全流程', async () => {
   const acc = await Accounts.create(r, { name: '小明' });
   assert.equal((await Accounts.list(r)).length, 1);
   await TodayPlan.add(r, acc.id, { title: '写周报' });
-  const done = await TodayPlan.toggle(r, (await TodayPlan.listByDate(r, acc.id, new Date().toISOString().slice(0, 10)))[0].id);
+  const done = await TodayPlan.toggle(r, (await TodayPlan.listByDate(r, acc.id, todayStr()))[0].id);
   assert.equal(done.done, true);
   await Ledger.ensureDefaultCards(r, acc.id);
   const card = (await Ledger.listCards(r, acc.id))[0];
