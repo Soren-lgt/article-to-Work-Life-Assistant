@@ -39,7 +39,8 @@ export function accountManagerBodyHTML() {
       <input data-f="pwd" type="password" placeholder="可选本地密码">
       <button class="btn primary" data-act="create">创建账号</button>
     </div>
-    <div data-el="list"></div>`;
+    <div data-el="list"></div>
+    <div data-el="logout"></div>`;
 }
 
 // 纯函数：账号列表行（当前账号不显示“登录”，显示当前标记；含改名/设密码/删除）
@@ -57,6 +58,16 @@ export function accountListHTML(accounts, currentId) {
       </span>
     </div>`;
   }).join('');
+}
+
+// 纯函数：是否处于登录态（决定是否展示退出按钮）
+export function logoutButtonVisible(currentId) { return Boolean(currentId); }
+
+// 纯函数：退出登录行；未登录时不渲染
+export function buildLogoutRowHTML(currentId) {
+  return currentId
+    ? '<div class="row" style="margin:10px 0 0"><button class="btn danger" data-act="logout" style="width:100%">退出登录</button></div>'
+    : '';
 }
 
 export const App = {
@@ -154,6 +165,8 @@ async function openAccountManager() {
     App.accounts = await Accounts.list(App.repo);
     const list = ctl.body.querySelector('[data-el="list"]');
     list.innerHTML = accountListHTML(App.accounts, AppState.currentAccountId);
+    const logoutBox = ctl.body.querySelector('[data-el="logout"]');
+    if (logoutBox) logoutBox.innerHTML = buildLogoutRowHTML(AppState.currentAccountId);
   }
 
   ctl.overlay.addEventListener('click', async (e) => {
@@ -190,6 +203,10 @@ async function openAccountManager() {
       } else if (act === 'del') {
         if (!window.confirm('确认删除账号「' + e.target.dataset.name + '」？将同时清空其个人数据。')) return;
         await Accounts.remove(App.repo, id);
+        await refreshAccounts();
+        await refresh();
+      } else if (act === 'logout') {
+        AppState.set({ currentAccountId: null });
         await refreshAccounts();
         await refresh();
       }
