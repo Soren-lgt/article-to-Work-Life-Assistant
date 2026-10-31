@@ -189,7 +189,8 @@ export default {
       }
     }
 
-    el.addEventListener('click', async (e) => {
+    if (el.__clickHandler) el.removeEventListener('click', el.__clickHandler);
+    const onClick = async (e) => {
       const act = e.target.dataset.act;
       const op = e.target.dataset.op;
       const id = e.target.dataset.id;
@@ -200,14 +201,16 @@ export default {
       else if (act === 'toggleView') { view = view === 'day' ? 'month' : 'day'; await refresh(); }
       else if (op === 'toggle') { await TodayPlan.toggle(repo, id); await refresh(); }
       else if (op === 'del') {
-        const t = currentRows.find((x) => x.id === id);
-        if (t) openDeleteModal(t);
+        const row = currentRows.find((x) => x.id === id);
+        if (row) openDeleteModal(row);
       }
       else if (op === 'edit') {
-        const t = currentRows.find((x) => x.id === id);
-        if (t) openEditModal(t);
+        const row = currentRows.find((x) => x.id === id);
+        if (row) openEditModal(row);
       }
-    });
+    };
+    el.addEventListener('click', onClick);
+    el.__clickHandler = onClick;
 
     if (el.__unsub) el.__unsub();
     el.__unsub = state.subscribe(() => { refresh(); });

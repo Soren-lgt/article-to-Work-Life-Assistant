@@ -98,3 +98,9 @@ test("R3：添加/编辑/删除均走可靠模态，不再使用原生 prompt/co
   assert.ok(todaySrc.includes("openEditModal"));
   assert.ok(todaySrc.includes("openDeleteModal"));
 });
+
+test("R3-T4：重复挂载先解绑旧点击监听，避免一次操作弹出多个窗口导致要连点", () => {
+  assert.ok(todaySrc.includes("removeEventListener('click', el.__clickHandler)"), "重挂载应移除旧点击监听");
+  assert.ok(todaySrc.includes("el.__clickHandler = onClick"), "处理器应被命名并保存");
+  assert.ok(todaySrc.includes("openModal"), "新增/编辑/删除均走可靠模态弹窗");
+});
