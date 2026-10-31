@@ -4,6 +4,7 @@
 import { Backup } from '../lib/backup.js';
 import { Ledger } from '../lib/ledger.js';
 import { openModal, openConfirm, openPrompt, confirmMessageHTML } from '../ui/modal.js';
+import { normalizeTheme, THEME_OPTIONS } from '../lib/theme.js';
 
 const PREF_KEY = 'worklife.prefs';
 
@@ -24,9 +25,14 @@ const MODULE_LABELS = {
 };
 
 export function applyTheme(theme) {
-  const dark = theme === 'dark';
-  try { document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light'); } catch { /* ignore */ }
-  try { document.body.classList.toggle('dark', dark); } catch { /* ignore */ }
+  const norm = normalizeTheme(theme);
+  const legacyDark = theme === 'dark';
+  const darkOn = legacyDark || norm === 'night';
+  try {
+    const dataVal = (theme === 'dark' || theme === 'light') ? theme : norm;
+    document.documentElement.setAttribute('data-theme', dataVal);
+  } catch { /* ignore */ }
+  try { document.body.classList.toggle('dark', darkOn); } catch { /* ignore */ }
 }
 
 export function ensureThemeCss() {
@@ -187,9 +193,10 @@ function render(el, ctx) {
   themeRow.className = 'row'; themeRow.style.marginBottom = '8px';
   themeRow.innerHTML = '<span style="flex:1">主题</span>';
   const themeSel = document.createElement('select');
-  for (const [val, txt] of [['light', '浅色'], ['dark', '深色']]) {
+  const currentTheme = normalizeTheme(prefs.theme);
+  for (const [val, txt] of THEME_OPTIONS) {
     const o = document.createElement('option');
-    o.value = val; o.textContent = txt; if ((prefs.theme || 'light') === val) o.selected = true;
+    o.value = val; o.textContent = txt; if (currentTheme === val) o.selected = true;
     themeSel.appendChild(o);
   }
   themeSel.addEventListener('change', () => {
