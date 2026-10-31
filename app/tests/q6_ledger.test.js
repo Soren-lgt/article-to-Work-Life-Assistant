@@ -123,3 +123,9 @@ test("R3-T8：点卡片子元素归到卡片记账；点删除按钮归到删除
   assert.equal(resolveLedgerOp(delBtn).op, "delcard", "删除按钮应优先识别为删除");
   assert.equal(resolveLedgerOp(null).op, null);
 });
+
+test("R3-T9：新增消费/删除弹窗重挂载不重复绑定，取消一次关闭", () => {
+  assert.ok(moduleSrc.includes("removeEventListener('click', el.__clickHandler)"), "重挂载应移除旧点击监听");
+  assert.ok(moduleSrc.includes("el.__clickHandler = onClick"), "处理器应命名保存");
+  assert.ok(moduleSrc.includes("openModal"), "新增消费与删除确认均走可靠模态");
+});

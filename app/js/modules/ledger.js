@@ -213,7 +213,8 @@ export default {
       if (datePicker.value) { date = datePicker.value; month = date.slice(0, 7); render(); }
     });
 
-    el.addEventListener('click', async (e) => {
+    if (el.__clickHandler) el.removeEventListener('click', el.__clickHandler);
+    const onClick = async (e) => {
       const act = e.target.dataset.act;
       const hit = resolveLedgerOp(e.target);
       const op = hit.op;
@@ -225,7 +226,9 @@ export default {
       else if (act === 'addCard') { openNewConsumeModal(); }
       else if (op === 'delcard') { openRemoveCardModal(id, hit.name); }
       else if (op === 'pick') { openRecordModal({ cardId: id, name: hit.name }); }
-    });
+    };
+    el.addEventListener('click', onClick);
+    el.__clickHandler = onClick;
 
     if (el.__unsub) el.__unsub();
     el.__unsub = state.subscribe(() => { render(); });
