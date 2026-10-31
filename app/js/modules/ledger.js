@@ -43,6 +43,13 @@ export function newConsumeFormHTML() {
     <input data-f="note" placeholder="备注">`;
 }
 
+// 纯函数：解析点击命中的记账卡片操作（点在卡片子元素上也能归到卡片本体；删除按钮最优先）
+export function resolveLedgerOp(target) {
+  const el = target && typeof target.closest === "function" ? target.closest("[data-op]") : target;
+  if (!el || !el.dataset) return { op: null, id: null, name: "" };
+  return { op: el.dataset.op || null, id: el.dataset.id || null, name: el.dataset.name || "" };
+}
+
 // 纯函数：删除消费卡片确认正文
 export function removeCardConfirmHTML(name) {
   return `<div>确认删除「${escapeHtml(name)}」及其全部记账记录？此操作不可撤销。</div>`;
@@ -208,15 +215,16 @@ export default {
 
     el.addEventListener('click', async (e) => {
       const act = e.target.dataset.act;
-      const op = e.target.dataset.op;
-      const id = e.target.dataset.id;
+      const hit = resolveLedgerOp(e.target);
+      const op = hit.op;
+      const id = hit.id;
       if (act === 'prev') { date = shiftDate(date, -1); month = date.slice(0, 7); await render(); }
       else if (act === 'next') { date = shiftDate(date, 1); month = date.slice(0, 7); await render(); }
       else if (act === 'today') { date = todayStr(); month = monthStr(); await render(); }
       else if (act === 'toggleView') { view = view === 'day' ? 'month' : 'day'; await render(); }
       else if (act === 'addCard') { openNewConsumeModal(); }
-      else if (op === 'delcard') { openRemoveCardModal(id, e.target.dataset.name || ''); }
-      else if (op === 'pick') { openRecordModal({ cardId: id, name: e.target.dataset.name || '' }); }
+      else if (op === 'delcard') { openRemoveCardModal(id, hit.name); }
+      else if (op === 'pick') { openRecordModal({ cardId: id, name: hit.name }); }
     });
 
     if (el.__unsub) el.__unsub();

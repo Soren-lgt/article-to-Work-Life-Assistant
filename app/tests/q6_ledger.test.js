@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { MemoryAdapter, Repository } from "../js/lib/db.js";
 import { Ledger } from "../js/lib/ledger.js";
-import ledger, { ledgerHomeButtonLabel, ledgerAmountFromInput, newConsumeFormHTML, removeCardConfirmHTML } from "../js/modules/ledger.js";
+import ledger, { ledgerHomeButtonLabel, ledgerAmountFromInput, newConsumeFormHTML, removeCardConfirmHTML, resolveLedgerOp } from "../js/modules/ledger.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const appDir = join(here, "..");
@@ -112,4 +112,14 @@ test("R7：按钮改名新增消费、卡片 hover 类；移除当天记录明�
 test("R7：设置页初始卡片管理仅列预置卡，不暴露自建新增入口", () => {
   assert.ok(settingsSrc.includes("preset === true"), "只展示预置初始卡片");
   assert.ok(!settingsSrc.includes("新增卡片"), "初始卡片管理不再提供自建卡片新增");
+});
+
+test("R3-T8：点卡片子元素归到卡片记账；点删除按钮归到删除；空目标安全返回", () => {
+  const pickCard = { dataset: { op: "pick", id: "c1", name: "餐饮" }, closest: () => pickCard };
+  const innerStrong = { tagName: "STRONG", closest: () => pickCard };
+  assert.equal(resolveLedgerOp(innerStrong).op, "pick", "点卡片标题等子元素应进入记账");
+  assert.equal(resolveLedgerOp(innerStrong).id, "c1");
+  const delBtn = { dataset: { op: "delcard", id: "c1", name: "餐饮" }, closest: () => delBtn };
+  assert.equal(resolveLedgerOp(delBtn).op, "delcard", "删除按钮应优先识别为删除");
+  assert.equal(resolveLedgerOp(null).op, null);
 });
