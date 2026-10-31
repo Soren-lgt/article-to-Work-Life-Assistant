@@ -3,7 +3,12 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { MemoryAdapter, Repository } from "../js/lib/db.js";
 import { Quiz } from "../js/lib/quiz.js";
-import quiz, { buildTopActionsHTML, buildBankRowHTML, buildJudgeOptionHTML, buildChoiceOptionRowHTML } from "../js/modules/quiz.js";
+import quiz, { buildTopActionsHTML, buildBankRowHTML, buildJudgeOptionHTML, buildChoiceOptionRowHTML, buildHistoryRowHTML, historyDetailHTML } from "../js/modules/quiz.js";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
+const here = dirname(fileURLToPath(import.meta.url));
+const quizSrc = readFileSync(join(here, "..", "js/modules/quiz.js"), "utf8");
 
 test("顶部动作：顺序练习、考试模式在新建题库左侧且三者相邻，无题时禁用", () => {
   const h = buildTopActionsHTML(3);
@@ -89,4 +94,51 @@ test("quiz mount 骨架不抛错且渲染三类入口", async () => {
     assert.ok(el.innerHTML.includes('data-el="cats"'), "应有分类栏锚点");
     assert.ok(el.innerHTML.includes('data-el="main"'), "应有主内容锚点");
   } finally { uninstallGlobals(); }
+});
+
+test("R6：同一分类下不同题库的题目严格隔离，抽题只来自当前题库", async () => {
+  const r = new Repository(new MemoryAdapter());
+  const bA = await Quiz.addBank(r, "u1", "choice", "A库");
+  const bB = await Quiz.addBank(r, "u1", "choice", "B库");
+  await Quiz.addQuestion(r, bA.id, { stem: "A1", type: "single", options: ["x", "y"], answer: "x" });
+  await Quiz.addQuestion(r, bB.id, { stem: "B1", type: "single", options: ["x", "y"], answer: "x" });
+  const qA = await Quiz.listQuestions(r, bA.id);
+  const qB = await Quiz.listQuestions(r, bB.id);
+  assert.equal(qA.length, 1);
+  assert.equal(qB.length, 1);
+  assert.equal(qA[0].stem, "A1");
+  assert.equal(qB[0].stem, "B1");
+  assert.equal(Quiz.drawQuestions(qA, 1)[0].stem, "A1");
+});
+
+test("R6：removeAttempt 可删除单条成绩历史", async () => {
+  const r = new Repository(new MemoryAdapter());
+  const bank = await Quiz.addBank(r, "u1", "choice", "c");
+  const a = await Quiz.saveAttempt(r, "u1", { bankId: bank.id, mode: "practice", score: 1, total: 1, details: [] });
+  assert.equal((await Quiz.listAttempts(r, "u1")).length, 1);
+  await Quiz.removeAttempt(r, a.id);
+  assert.equal((await Quiz.listAttempts(r, "u1")).length, 0);
+});
+
+test("R6：历史行含查看与删除按钮", () => {
+  const row = buildHistoryRowHTML({ id: "h1", mode: "exam", createdAt: Date.now(), score: 3, total: 5 }, 0);
+  assert.match(row, /data-histview="h1"/);
+  assert.match(row, /data-histdel="h1"/);
+  assert.ok(row.includes("查看"));
+  assert.ok(row.includes("删除"));
+});
+
+test("R6：历史明细为只读，展示题干/我的答案/参考答案", () => {
+  const h = historyDetailHTML({
+    mode: "practice", score: 2, total: 3,
+    details: [{ stem: "题干一", categoryKey: "choice", correct: true, userAnswer: "A", answer: "A" }],
+  });
+  assert.ok(h.includes("题干一"));
+  assert.ok(h.includes("我的答案"));
+  assert.ok(h.includes("参考答案"));
+  assert.ok(h.includes("只读"));
+});
+
+test("R6：练习/考试界面提供退出入口，不局限于结束训练/交卷", () => {
+  assert.ok(quizSrc.includes('data-act="quit"'), "答题界面应有退出按钮");
 });

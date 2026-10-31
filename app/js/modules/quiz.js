@@ -48,6 +48,42 @@ export function buildChoiceOptionRowHTML() {
   </div>`;
 }
 
+// 纯函数：历史成绩明细只读视图（题干 + 我的答案 + 参考答案 + 对错标记）
+export function historyDetailHTML(att) {
+  const rows = (att.details || []).map((r, i) => {
+    const ok = r.manual ? null : r.correct;
+    const label = r.manual ? '待人工批改' : (r.correct ? '正确' : '错误');
+    const style = r.manual ? 'var(--muted)' : (r.correct ? 'green' : '#c00');
+    let ref = '';
+    if (r.categoryKey === 'choice') ref = Array.isArray(r.answer) ? r.answer.join('、') : String(r.answer == null ? '' : r.answer);
+    else if (r.categoryKey === 'qa') ref = r.answer || '';
+    else ref = r.refCode || '';
+    const mine = r.userAnswer == null ? '' : (Array.isArray(r.userAnswer) ? r.userAnswer.join('、') : String(r.userAnswer));
+    return `<div style="padding:5px 0;border-bottom:1px solid var(--line)">
+      <div class="row" style="justify-content:space-between">
+        <span>${i + 1}. ${esc(r.stem)}</span>
+        <span style="color:${style}">${label}</span>
+      </div>
+      <div class="muted" style="padding-left:16px;margin-top:2px">我的答案：${esc(mine) || '（未作答）'}</div>
+      <div class="muted" style="padding-left:16px">参考答案：${esc(ref) || '—'}</div>
+    </div>`;
+  }).join('');
+  return `<div class="muted" style="margin-bottom:8px">${att.mode === 'exam' ? '考试' : '练习'} · 得分 ${att.score}/${att.total}（只读，不可修改）</div>${rows || '<div class="muted">无作答明细。</div>'}`;
+}
+
+// 纯函数：成绩历史行：摘要 + 查看 / 删除按钮
+export function buildHistoryRowHTML(a, index) {
+  const when = new Date(a.createdAt).toLocaleString();
+  const spent = a.timeSpent ? ` · 用时 ${Math.round(a.timeSpent / 1000)}s` : '';
+  return `<div class="row" style="justify-content:space-between;align-items:center;padding:4px 0;gap:6px">
+    <span style="flex:1">${index + 1}. ${a.mode === 'exam' ? '考试' : '练习'} · ${esc(when)}${spent} · ${a.score}/${a.total}</span>
+    <span class="row" style="gap:6px">
+      <button class="btn" data-histview="${a.id}">查看</button>
+      <button class="btn danger" data-histdel="${a.id}">删除</button>
+    </span>
+  </div>`;
+}
+
 export default {
   route: 'quiz',
   title: '题库',
@@ -181,10 +217,13 @@ export default {
       const hist = main.querySelector('[data-el="history"]');
       const atts = await Quiz.listAttempts(repo, accId);
       hist.innerHTML = `<strong>成绩历史</strong><div style="margin-top:8px">${atts.length
-        ? atts.slice(0, 10).map((a) => `<div class="row" style="justify-content:space-between;padding:4px 0">
-            <span>${a.mode === 'exam' ? '考试' : '练习'} · ${esc(new Date(a.createdAt).toLocaleString())}${a.timeSpent ? ` · 用时 ${Math.round(a.timeSpent / 1000)}s` : ''}</span>
-            <span>${a.score}/${a.total}</span></div>`).join('')
+        ? atts.slice(0, 10).map((a, idx) => buildHistoryRowHTML(a, idx)).join('')
         : '<span class="muted">暂无记录。</span>'}</div>`;
+      hist.querySelectorAll('[data-histview]').forEach((b) => b.onclick = () => openHistoryViewModal(b.dataset.histview));
+      hist.querySelectorAll('[data-histdel]').forEach((b) => b.onclick = async () => {
+        await Quiz.removeAttempt(repo, b.dataset.histdel);
+        refresh();
+      });
     }
 
     function catName() {
@@ -210,6 +249,20 @@ export default {
         v.deadline = Date.now() + mins * 60000;
         startRunner('exam', picked);
       };
+    }
+
+    // 历史成绩：只读查看本次作答明细
+    async function openHistoryViewModal(id) {
+      const atts = await Quiz.listAttempts(repo, state.currentAccountId);
+      const att = atts.find((a) => a.id === id);
+      if (!att) return;
+      openModal({
+        title: '历史作答结果（只读）',
+        submitText: '关闭',
+        cancelText: '返回列表',
+        bodyHTML: historyDetailHTML(att),
+        onSubmit: () => false,
+      });
     }
 
     // ---------- 录题模态 ----------
@@ -364,6 +417,7 @@ export default {
           <button class="btn" data-act="prev" ${v.i === 0 ? 'disabled' : ''}>上一题</button>
           ${v.mode === 'practice' ? '<button class="btn primary" data-act="check">提交本题</button>' : ''}
           <button class="btn" data-act="next" ${v.i >= v.qs.length - 1 ? 'disabled' : ''}>下一题</button>
+          <button class="btn" data-act="quit" style="color:#c00">退出</button>
           ${v.mode === 'exam'
             ? '<button class="btn primary" data-act="submit" style="margin-left:auto">交卷</button>'
             : '<button class="btn" data-act="finish" style="margin-left:auto">结束练习</button>'}
@@ -409,6 +463,12 @@ export default {
       if (fin) fin.onclick = () => finish(false);
       const sub = main.querySelector('[data-act="submit"]');
       if (sub) sub.onclick = () => { if (confirm('确定交卷？')) finishExam(); };
+      const qt = main.querySelector('[data-act="quit"]');
+      if (qt) qt.onclick = () => {
+        if (el.__timer) { clearInterval(el.__timer); el.__timer = null; }
+        v.screen = 'manage';
+        refresh();
+      };
     }
 
     function finishExam() { v.ans[v.i] = collectAnswer(v.qs[v.i]); finish(true); }

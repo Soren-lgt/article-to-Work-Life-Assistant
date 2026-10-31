@@ -104,4 +104,6 @@ export const Quiz = {
     const rows = await repo.list('attempt', (r) => r.accountId === accountId && (!bankId || r.bankId === bankId));
     return rows.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
   },
+
+  async removeAttempt(repo, id) { return repo.remove('attempt', id); },
 };
