@@ -13,6 +13,13 @@ function sumAmounts(rows) {
   return rows.reduce((s, r) => s + (Number(r.amount) || 0), 0);
 }
 
+// H2：在候选记录中定位“同账号 + 卡片 + 日期”的既有记录作为替换目标；找不到返回 null
+export function findRecordByKey(rows, accountId, cardId, date) {
+  return (rows || []).find(
+    (r) => r.accountId === accountId && r.cardId === cardId && r.date === date,
+  ) || null;
+}
+
 export const Ledger = {
   // 首次使用初始化预置卡片（幂等）
   async ensureDefaultCards(repo, accountId) {
@@ -63,11 +70,13 @@ export const Ledger = {
     if (!date) throw new Error('缺少日期');
     const amt = toAmount(amount);
     const noteText = String(note || '');
-    // F3：同一账号 + 卡片 + 日期只保留一条；再次写金额为替换，不累加
-    const existing = await repo.list('ledgerRecord', (r) => r.accountId === accountId && r.cardId === cardId && r.date === date);
-    if (existing.length) {
-      const [keep, ...extra] = existing;
-      for (const e of extra) await repo.remove('ledgerRecord', e.id);
+    // H2：同一账号 + 卡片 + 日期只保留一条；再次写金额为替换，不累加
+    const candidates = await repo.list('ledgerRecord', (r) => r.accountId === accountId && r.cardId === cardId);
+    const keep = findRecordByKey(candidates, accountId, cardId, date);
+    if (keep) {
+      for (const e of candidates) {
+        if (e.id !== keep.id && e.date === date) await repo.remove('ledgerRecord', e.id);
+      }
       return repo.put('ledgerRecord', { ...keep, amount: amt, note: noteText });
     }
     return repo.put('ledgerRecord', {

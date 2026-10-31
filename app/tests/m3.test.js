@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { MemoryAdapter, Repository } from '../js/lib/db.js';
-import { Ledger } from '../js/lib/ledger.js';
+import { Ledger, findRecordByKey } from '../js/lib/ledger.js';
 
 function makeRepo() { return new Repository(new MemoryAdapter()); }
 
@@ -164,4 +164,35 @@ test("G1 每个卡片每日只记一笔：同卡同日多次写入后该卡 coun
   const row = byCard.find((c) => c.cardId === b.id);
   assert.equal(row.count, 1, "每卡每日仅一条记录");
   assert.equal(row.total, 22, "金额为最后一次替换值");
+});
+
+test("H2 findRecordByKey：仅同账号+卡片+日期命中为替换目标，其余返回 null", () => {
+  const rows = [
+    { id: "a", accountId: "u1", cardId: "c1", date: "2026-10-31", amount: 5 },
+    { id: "b", accountId: "u1", cardId: "c1", date: "2026-10-30", amount: 9 },
+    { id: "c", accountId: "u1", cardId: "c2", date: "2026-10-31", amount: 3 },
+    { id: "d", accountId: "u2", cardId: "c1", date: "2026-10-31", amount: 4 },
+  ];
+  assert.equal(findRecordByKey(rows, "u1", "c1", "2026-10-31").id, "a");
+  assert.equal(findRecordByKey(rows, "u1", "c1", "2026-10-30").id, "b");
+  assert.equal(findRecordByKey(rows, "u1", "c1", "2026-11-01"), null);
+  assert.equal(findRecordByKey(rows, "u1", "c2", "2026-10-31").id, "c");
+  assert.equal(findRecordByKey(rows, "u2", "c1", "2026-10-31").id, "d");
+  assert.equal(findRecordByKey(null, "u1", "c1", "2026-10-31"), null);
+});
+
+test("H2 替换某日金额不影响同卡其他日期记录，月度跨日仍正确合计", async () => {
+  const r = makeRepo();
+  const [b] = await Ledger.ensureDefaultCards(r, "u1");
+  await Ledger.addRecord(r, "u1", { cardId: b.id, amount: 10, date: "2026-10-30" });
+  await Ledger.addRecord(r, "u1", { cardId: b.id, amount: 20, date: "2026-10-31" });
+  await Ledger.addRecord(r, "u1", { cardId: b.id, amount: 22, date: "2026-10-31" });
+  const d30 = await Ledger.listByDate(r, "u1", "2026-10-30");
+  assert.equal(d30.length, 1);
+  assert.equal(d30[0].amount, 10, "前一日记录不受当日替换影响");
+  const d31 = await Ledger.listByDate(r, "u1", "2026-10-31");
+  assert.equal(d31.length, 1);
+  assert.equal(d31[0].amount, 22);
+  const s = await Ledger.monthSummary(r, "u1", "2026-10");
+  assert.equal(s.total, 32, "不同日期金额各自保留，月度合计为 10+22");
 });
