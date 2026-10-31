@@ -80,6 +80,12 @@ export const Quiz = {
     return rows.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
   },
 
+  // F1：考试模式跨全部题库汇总该账号所有题目（不限制当前选中的 bankId）
+  async listAllQuestions(repo, accountId) {
+    const rows = await repo.list('question', (r) => r.accountId === accountId);
+    return rows.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+  },
+
   async removeQuestion(repo, id) { return repo.remove('question', id); },
 
   // ---------- 抽题 ----------

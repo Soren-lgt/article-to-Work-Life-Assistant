@@ -153,3 +153,32 @@ test("saveAttempt 保存 startedAt 与 timeSpent 作答时间", async () => {
   assert.equal(a.startedAt, 1000);
   assert.equal(a.timeSpent, 95000);
 });
+
+test("F1 listAllQuestions 跨全部题库汇总当前账号题目并隔离他人", async () => {
+  const r = makeRepo();
+  const b1 = await Quiz.addBank(r, "u1", "choice", "库1");
+  const b2 = await Quiz.addBank(r, "u1", "qa", "库2");
+  await Quiz.addQuestion(r, b1.id, { stem: "c1", type: "judge", answer: "对" });
+  await Quiz.addQuestion(r, b1.id, { stem: "c2", type: "judge", answer: "错" });
+  await Quiz.addQuestion(r, b2.id, { stem: "q1", answer: "x", keywords: ["k"] });
+  const b3 = await Quiz.addBank(r, "u2", "choice", "他人库");
+  await Quiz.addQuestion(r, b3.id, { stem: "h", type: "judge", answer: "对" });
+  const all = await Quiz.listAllQuestions(r, "u1");
+  assert.equal(all.length, 3, "汇总 u1 全部题库题目");
+  const bankIds = new Set(all.map((q) => q.bankId));
+  assert.ok(bankIds.has(b1.id) && bankIds.has(b2.id), "覆盖多个题库");
+  assert.equal((await Quiz.listAllQuestions(r, "u2")).length, 1);
+});
+
+test("F1 考试跨库抽题：从汇总列表随机抽取且不重复", async () => {
+  const r = makeRepo();
+  const b1 = await Quiz.addBank(r, "u1", "choice", "库1");
+  const b2 = await Quiz.addBank(r, "u1", "choice", "库2");
+  for (let i = 0; i < 3; i++) await Quiz.addQuestion(r, b1.id, { stem: "a" + i, type: "judge", answer: "对" });
+  for (let i = 0; i < 3; i++) await Quiz.addQuestion(r, b2.id, { stem: "b" + i, type: "judge", answer: "对" });
+  const all = await Quiz.listAllQuestions(r, "u1");
+  assert.equal(all.length, 6);
+  const drawn = Quiz.drawQuestions(all, 4, () => 0.3);
+  assert.equal(drawn.length, 4);
+  assert.equal(new Set(drawn.map((q) => q.id)).size, 4);
+});

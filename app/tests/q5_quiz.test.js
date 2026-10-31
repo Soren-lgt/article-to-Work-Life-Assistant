@@ -157,3 +157,11 @@ test("R3-T7：答题界面由 openModal 浮层承载，操作按钮内容保持�
   }
   assert.ok(quizSrc.includes("openConfirm"), "交卷确认走同款模态");
 });
+
+test("F1：考试模式从全部题库汇总随机抽题，不再限于当前库", () => {
+  assert.ok(quizSrc.includes("listAllQuestions"), "数据层提供跨库汇总");
+  const examIdx = quizSrc.indexOf('data-act="startExam"');
+  const seg = quizSrc.slice(examIdx, examIdx + 700);
+  assert.ok(seg.includes("listAllQuestions"), "开始考试取全部题库题目");
+  assert.ok(seg.includes("drawQuestions"), "随机抽取");
+});

@@ -137,9 +137,8 @@ export default {
       };
       const eb = catsBar.querySelector('[data-act="examSetup"]');
       if (eb) eb.onclick = async () => {
-        const list = await currentQuestions();
-        const reason = startupBlockReason(v.bankId, list.length);
-        if (reason) { window.alert(reason); return; }
+        const all = await Quiz.listAllQuestions(repo, state.currentAccountId);
+        if (!(all.length > 0)) { window.alert('题库中还没有任何题目，请先添加题目。'); return; }
         v.showSetup = !v.showSetup; renderSetup();
       };
       const nb = catsBar.querySelector('[data-act="newBank"]');
@@ -267,7 +266,7 @@ export default {
           <button class="btn primary" data-act="startExam">开始考试</button>
         </div>` : '';
       if (v.showSetup) setup.querySelector('[data-act="startExam"]').onclick = async () => {
-        const list = await currentQuestions();
+        const list = await Quiz.listAllQuestions(repo, state.currentAccountId);
         if (!list.length) return;
         const cnt = Math.max(1, Math.min(list.length, Number(setup.querySelector('[data-el="cnt"]').value) || 1));
         const mins = Math.max(1, Number(setup.querySelector('[data-el="mins"]').value) || 10);
