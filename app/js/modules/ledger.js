@@ -1,5 +1,5 @@
 // AI生成
-// 每日记账页：分类卡片（点击弹窗记一笔）+ 按天查看 + 当天记录 + 月度汇总；可靠模态
+// 每日记账页：消费卡片（点击弹窗记一笔，hover 互动）+ 按天合计 + 月度汇总；新增消费/删除均走可靠模态
 import { Ledger } from '../lib/ledger.js';
 import { todayStr, monthStr, formatAmount } from '../lib/utils.js';
 import { openModal } from '../ui/modal.js';
@@ -32,6 +32,22 @@ export function ledgerAmountFromInput(raw) {
   return { ok: true, value: n };
 }
 
+// 纯函数：新增消费表单（名称 + 可选首笔金额 + 备注）
+export function newConsumeFormHTML() {
+  return `
+    <label>消费名称</label>
+    <input data-f="name" placeholder="如：餐饮、交通">
+    <label>本次消费金额（元，可留空）</label>
+    <input data-f="amt" type="number" step="0.01" min="0" placeholder="如 12.5">
+    <label>备注（可选）</label>
+    <input data-f="note" placeholder="备注">`;
+}
+
+// 纯函数：删除消费卡片确认正文
+export function removeCardConfirmHTML(name) {
+  return `<div>确认删除「${escapeHtml(name)}」及其全部记账记录？此操作不可撤销。</div>`;
+}
+
 export default {
   route: 'ledger',
   title: '每日记账',
@@ -52,7 +68,7 @@ export default {
             <input type="date" data-el="datePicker" title="选择历史日期">
           </div>
           <div class="row">
-            <button class="btn" data-act="addCard">+ 新建分类</button>
+            <button class="btn" data-act="addCard">+ 新增消费</button>
             <button class="btn" data-act="toggleView">月度汇总</button>
           </div>
         </div>
@@ -72,13 +88,14 @@ export default {
       todayBtn.textContent = ledgerHomeButtonLabel(date === todayStr());
     }
 
-    // 点击分类卡片：弹窗填写金额记账
+    // 点击消费卡片：弹窗填写金额记账（删除按钮除外，见事件分支）
     function openRecordModal(card) {
       const accId = state.currentAccountId;
       if (!accId) { window.alert('请先创建并选择账号'); return; }
       const ctl = openModal({
         title: `记一笔 · ${card.name}`,
         submitText: '保存',
+        cancelText: '取消',
         bodyHTML: `
           <label>金额（元，必填）</label>
           <input data-f="amt" type="number" step="0.01" min="0" placeholder="如 12.5">
@@ -98,6 +115,46 @@ export default {
       });
     }
 
+    // 新增消费：可靠模态，可同时录入首笔金额；自建卡不进入初始卡片管理
+    function openNewConsumeModal() {
+      const accId = state.currentAccountId;
+      if (!accId) { window.alert('请先创建并选择账号'); return; }
+      const ctl = openModal({
+        title: '新增消费',
+        submitText: '创建',
+        cancelText: '取消',
+        bodyHTML: newConsumeFormHTML(),
+        onSubmit: async () => {
+          const name = ctl.body.querySelector('[data-f="name"]').value.trim();
+          if (!name) { window.alert('请填写消费名称'); return true; }
+          const amtRaw = ctl.body.querySelector('[data-f="amt"]').value;
+          const note = ctl.body.querySelector('[data-f="note"]').value.trim();
+          try {
+            const card = await Ledger.addCard(repo, accId, name);
+            const { ok, value } = ledgerAmountFromInput(amtRaw);
+            if (ok) await Ledger.addRecord(repo, accId, { cardId: card.id, amount: value, note, date });
+          } catch (e) { window.alert(e.message); return true; }
+          await render();
+          return false;
+        },
+      });
+    }
+
+    // 删除消费卡片：可靠确认模态
+    function openRemoveCardModal(cardId, name) {
+      openModal({
+        title: '删除消费',
+        submitText: '删除',
+        cancelText: '取消',
+        bodyHTML: removeCardConfirmHTML(name),
+        onSubmit: async () => {
+          await Ledger.removeCard(repo, cardId);
+          await render();
+          return false;
+        },
+      });
+    }
+
     async function renderDay() {
       const accId = state.currentAccountId;
       if (!accId) { dayView.innerHTML = '<div class="card muted">请先在设置中创建并选择账号。</div>'; return; }
@@ -108,13 +165,10 @@ export default {
       syncTodayButton();
       datePicker.value = date;
 
-      const nameOf = {};
-      for (const c of byCard) nameOf[c.cardId] = c.name;
-
       dayView.innerHTML = `
         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px">
           ${byCard.map((c) => `
-            <div class="card" data-op="pick" data-id="${c.cardId}" data-name="${escapeHtml(c.name)}" style="cursor:pointer">
+            <div class="card ledger-card" data-op="pick" data-id="${c.cardId}" data-name="${escapeHtml(c.name)}" style="cursor:pointer">
               <div class="row" style="justify-content:space-between">
                 <strong>${escapeHtml(c.name)}</strong>
                 <button class="btn danger" data-op="delcard" data-id="${c.cardId}" data-name="${escapeHtml(c.name)}" style="padding:2px 6px;font-size:12px">删</button>
@@ -123,24 +177,7 @@ export default {
               <div class="muted">${c.count} 笔</div>
             </div>`).join('')}
         </div>
-        <div class="card" style="margin-top:14px"><strong>当天合计：¥ ${yuan(day.total)}</strong><span class="muted"> · ${day.count} 笔</span></div>
-        <div class="card" style="margin-top:14px">
-          <strong>当天记录</strong>
-          <div data-el="records" style="margin-top:8px"></div>
-        </div>`;
-
-      const records = await Ledger.listByDate(repo, accId, date);
-      const recBox = dayView.querySelector('[data-el="records"]');
-      recBox.innerHTML = records.length === 0
-        ? '<div class="muted">当天暂无记录，点击上方分类卡片记一笔。</div>'
-        : records.map((rec) => `
-          <div class="row" style="justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--line)">
-            <span style="flex:1">${escapeHtml(nameOf[rec.cardId] || '未知分类')}${rec.note ? ' · ' + escapeHtml(rec.note) : ''}</span>
-            <span class="row">
-              <span>${rec.amount == null ? '未填金额' : '¥ ' + formatAmount(rec.amount)}</span>
-              <button class="btn danger" data-op="delrec" data-id="${rec.id}" style="padding:2px 8px">删除</button>
-            </span>
-          </div>`).join('');
+        <div class="card" style="margin-top:14px"><strong>当天合计：¥ ${yuan(day.total)}</strong><span class="muted"> · ${day.count} 笔</span></div>`;
     }
 
     async function renderMonth() {
@@ -177,19 +214,9 @@ export default {
       else if (act === 'next') { date = shiftDate(date, 1); month = date.slice(0, 7); await render(); }
       else if (act === 'today') { date = todayStr(); month = monthStr(); await render(); }
       else if (act === 'toggleView') { view = view === 'day' ? 'month' : 'day'; await render(); }
-      else if (act === 'addCard') {
-        const name = window.prompt('新分类名称');
-        if (name != null) { try { await Ledger.addCard(repo, state.currentAccountId, name); await render(); } catch (err) { window.alert(err.message); } }
-      }
-      else if (op === 'delcard') {
-        if (window.confirm('删除分类「' + e.target.dataset.name + '」及其全部记录？')) { await Ledger.removeCard(repo, id); await render(); }
-      }
-      else if (op === 'delrec') {
-        if (window.confirm('删除这条记账记录？')) { await Ledger.removeRecord(repo, id); await render(); }
-      }
-      else if (op === 'pick') {
-        openRecordModal({ cardId: id, name: e.target.dataset.name || '' });
-      }
+      else if (act === 'addCard') { openNewConsumeModal(); }
+      else if (op === 'delcard') { openRemoveCardModal(id, e.target.dataset.name || ''); }
+      else if (op === 'pick') { openRecordModal({ cardId: id, name: e.target.dataset.name || '' }); }
     });
 
     if (el.__unsub) el.__unsub();

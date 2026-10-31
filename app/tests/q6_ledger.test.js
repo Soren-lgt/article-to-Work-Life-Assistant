@@ -6,11 +6,12 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { MemoryAdapter, Repository } from "../js/lib/db.js";
 import { Ledger } from "../js/lib/ledger.js";
-import ledger, { ledgerHomeButtonLabel, ledgerAmountFromInput } from "../js/modules/ledger.js";
+import ledger, { ledgerHomeButtonLabel, ledgerAmountFromInput, newConsumeFormHTML, removeCardConfirmHTML } from "../js/modules/ledger.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const appDir = join(here, "..");
 const moduleSrc = readFileSync(join(appDir, "js/modules/ledger.js"), "utf8");
+const settingsSrc = readFileSync(join(appDir, "js/modules/settings.js"), "utf8");
 
 test("ledgerHomeButtonLabel：当天=今天，非当天=返回今天", () => {
   assert.equal(ledgerHomeButtonLabel(true), "今天");
@@ -72,4 +73,43 @@ test("ledger mount 骨架不抛错且含日期切换/视图切换/新建分类",
     assert.ok(el.innerHTML.includes('data-act="toggleView"'));
     assert.ok(el.innerHTML.includes('data-act="addCard"'));
   } finally { uninstallGlobals(); }
+});
+
+test("R7：新增消费表单含名称、金额、备注，金额为数字输入", () => {
+  const h = newConsumeFormHTML();
+  assert.ok(h.includes('data-f="name"'));
+  assert.ok(h.includes('data-f="amt"'));
+  assert.ok(h.includes('data-f="note"'));
+  assert.ok(h.includes('type="number"'), "金额应为数字输入框");
+});
+
+test("R7：删除消费确认纯函数含名称与确认提示", () => {
+  const h = removeCardConfirmHTML("餐饮");
+  assert.ok(h.includes("餐饮"));
+  assert.ok(h.includes("确认删除"));
+});
+
+test("R7：自建消费卡 preset=false，预置卡 preset=true（不进初始卡片管理）", async () => {
+  const r = new Repository(new MemoryAdapter());
+  await Ledger.ensureDefaultCards(r, "u1");
+  const presets = await Ledger.listCards(r, "u1");
+  assert.ok(presets.every((c) => c.preset === true));
+  const custom = await Ledger.addCard(r, "u1", "夜宵");
+  assert.equal(custom.preset, false);
+});
+
+test("R7：按钮改名新增消费、卡片 hover 类；移除当天记录明细与原生弹窗", () => {
+  assert.ok(moduleSrc.includes("+ 新增消费"), "按钮应为新增消费");
+  assert.ok(!moduleSrc.includes("新建分类") && !moduleSrc.includes("新增分类"), "不再使用分类旧称");
+  assert.ok(moduleSrc.includes("ledger-card"), "消费卡片应有 hover 类");
+  assert.ok(!moduleSrc.includes("当天记录"), "不应再渲染当天记录明细模块");
+  assert.ok(!moduleSrc.includes('data-el="records"'), "不应再有记录明细容器");
+  assert.ok(!moduleSrc.includes('op="delrec"'), "不应再有记录删除操作");
+  assert.ok(!moduleSrc.includes("window.prompt"));
+  assert.ok(!moduleSrc.includes("window.confirm"));
+});
+
+test("R7：设置页初始卡片管理仅列预置卡，不暴露自建新增入口", () => {
+  assert.ok(settingsSrc.includes("preset === true"), "只展示预置初始卡片");
+  assert.ok(!settingsSrc.includes("新增卡片"), "初始卡片管理不再提供自建卡片新增");
 });

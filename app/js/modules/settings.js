@@ -204,7 +204,7 @@ function render(el, ctx) {
     const accId = app.state.currentAccountId;
     if (!accId) { cardBox.innerHTML = '<div class="muted">请先在右上角登录账号。</div>'; return; }
     await Ledger.ensureDefaultCards(repo, accId);
-    const cards = await Ledger.listCards(repo, accId);
+    const cards = (await Ledger.listCards(repo, accId)).filter((c) => c.preset === true);
     for (const c of cards) {
       const row = document.createElement('div');
       row.className = 'row'; row.style.marginBottom = '6px';
@@ -227,15 +227,7 @@ function render(el, ctx) {
       row.append(label, rn, rm);
       cardBox.appendChild(row);
     }
-    const addRow = document.createElement('div');
-    addRow.className = 'row'; addRow.style.gap = '8px';
-    const ni = document.createElement('input'); ni.placeholder = '新卡片名称';
-    const ab = document.createElement('button'); ab.className = 'btn primary'; ab.textContent = '新增卡片';
-    ab.addEventListener('click', async () => {
-      try { await Ledger.addCard(repo, accId, ni.value); await refreshCards(); } catch (e) { window.alert(e.message); }
-    });
-    addRow.append(ni, ab);
-    cardBox.appendChild(addRow);
+    
   }
 
   prefCard.appendChild(prefBox);
