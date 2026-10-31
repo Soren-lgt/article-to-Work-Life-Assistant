@@ -80,18 +80,22 @@ test('7 个模块 mount 均不抛运行时错误且产出非空 HTML', async () 
   }
 });
 
-test('home 模块骨架含 5 张功能卡（今日/备忘/同组/题库/记账）', async () => {
+test('home 骨架：4 张可进入功能卡、无快速备忘卡、右下角问候角标', async () => {
   installGlobals();
   try {
     const mod = (await import('../js/modules/home.js')).default;
     const repo = await freshRepo();
     await TodayPlan.add(repo, 'u1', { title: '冒烟待办', priority: 'high' });
-    await Memo.add(repo, 'u1', '冒烟备忘内容');
     const el = stubEl();
     await mod.mount(el, makeCtx(repo));
     await new Promise((r) => setTimeout(r, 40));
-    for (const label of ['今日计划', '快速备忘', '同组计划', '题库', '每日记账']) {
+    for (const label of ['今日计划', '同组计划', '题库', '每日记账']) {
       assert.ok(el.innerHTML.includes(label), `首页缺少「${label}」卡片`);
+    }
+    assert.ok(!el.innerHTML.includes('快速备忘'), '已移除首页快速备忘卡片');
+    assert.ok(el.innerHTML.includes('greet-corner'), '问候角标存在');
+    for (const href of ['#today', '#group', '#quiz', '#ledger']) {
+      assert.ok(el.innerHTML.includes(`data-goto="${href}"`), `缺少跳转卡 ${href}`);
     }
   } finally { uninstallGlobals(); }
 });

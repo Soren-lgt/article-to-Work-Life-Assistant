@@ -164,3 +164,8 @@ html, body {
 
 .row { display: flex; gap: 8px; align-items: center; }
 .muted { color: var(--muted); }
+/* ===== Q1 首页：功能卡 hover 交互 + 右下角问候角标 ===== */
+.nav-card { cursor: pointer; transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease; }
+.nav-card:hover { transform: translateY(-3px); box-shadow: 0 8px 20px rgba(47, 111, 237, .14); border-color: var(--primary); }
+.nav-card:active { transform: translateY(-1px); }
+.greet-corner { position: fixed; right: 18px; bottom: 14px; z-index: 6; color: var(--muted); font-size: 13px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; }
