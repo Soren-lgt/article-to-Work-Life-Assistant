@@ -66,6 +66,15 @@ test("R3-T1：登录面板含账号选择与密文密码；注册面板含名称
   assert.ok(rh.includes('data-f="pwd"') && rh.includes('type="password"'), "注册密码密文");
 });
 
+test("R4-P1：注册面板不再重复“返回登录”按钮，仅保留创建按钮，切换由顶部 tabs 负责", () => {
+  const rh = registerPanelHTML();
+  assert.ok(!rh.includes("返回登录"), "注册面板内不出现返回登录按钮");
+  assert.ok(!rh.includes('data-act="tabLogin"'), "注册面板内不重复切换登录");
+  assert.ok(rh.includes('data-act="create"'), "保留注册并创建按钮");
+  const skeleton = accountManagerBodyHTML();
+  assert.ok(skeleton.includes('data-act="tabLogin"') && skeleton.includes('data-act="tabRegister"'), "顶部仍保留登录/注册切换条");
+});
+
 test("app.js：账号弹窗关闭底部按钮、退出置 loggedOut 且刷新", () => {
   const src = read("js/app.js");
   assert.ok(src.includes("footer: false"), "账号弹窗不应显示关闭/完成按钮");

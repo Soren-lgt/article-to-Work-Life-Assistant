@@ -53,7 +53,7 @@ export function loginPanelHTML(accounts = []) {
     </div>`;
 }
 
-// 纯函数：注册面板——名称 + 密文密码 + 创建 + 返回登录
+// 纯函数：注册面板——名称 + 密文密码 + 创建（登录/注册切换由顶部 tabs 承担，面板内不再重复“返回登录”）
 export function registerPanelHTML() {
   return `
     <label class="acc-field"><span>新账号名称</span>
@@ -64,7 +64,6 @@ export function registerPanelHTML() {
     </label>
     <div class="acc-form-actions">
       <button class="btn primary" data-act="create">注册并创建</button>
-      <button class="btn" data-act="tabLogin">返回登录</button>
     </div>`;
 }
 
