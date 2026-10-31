@@ -3,7 +3,12 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { MemoryAdapter, Repository } from "../js/lib/db.js";
 import { DevWork } from "../js/lib/devwork.js";
-import devwork, { snippetFormHTML } from "../js/modules/devwork.js";
+import devwork, { snippetFormHTML, taskFormHTML, bugFormHTML, devConfirmHTML } from "../js/modules/devwork.js";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
+const here = dirname(fileURLToPath(import.meta.url));
+const devSrc = readFileSync(join(here, "..", "js/modules/devwork.js"), "utf8");
 
 test("snippetFormHTML：代码区为多行 textarea，含标题/语言/代码/描述字段", () => {
   const html = snippetFormHTML({});
@@ -62,4 +67,36 @@ test("devwork 骨架含开发任务/Bug/代码片段三个 Tab", async () => {
     await new Promise((r) => setTimeout(r, 40));
     for (const tab of ["开发任务", "Bug 记录", "代码片段"]) assert.ok(el.innerHTML.includes(tab), `缺少 Tab：${tab}`);
   } finally { uninstallGlobals(); }
+});
+
+test("R4：任务表单含标题与所属项目字段并可回填", () => {
+  const blank = taskFormHTML({});
+  assert.ok(blank.includes('data-f="title"'));
+  assert.ok(blank.includes('data-f="projectName"'));
+  const filled = taskFormHTML({ title: "登录模块", projectName: "WMS" });
+  assert.ok(filled.includes('value="登录模块"'));
+  assert.ok(filled.includes('value="WMS"'));
+});
+
+test("R4：Bug 表单含标题与多行现象描述并可回填", () => {
+  const html = bugFormHTML({ title: "崩溃", symptom: "步骤一" });
+  assert.ok(html.includes('data-f="title"'));
+  assert.ok(html.includes('data-f="symptom"'));
+  assert.ok(html.includes("<textarea"));
+  assert.ok(html.includes("步骤一"));
+});
+
+test("R4：删除确认纯函数含类型与标题", () => {
+  const h = devConfirmHTML("任务", "重构");
+  assert.ok(h.includes("任务"));
+  assert.ok(h.includes("重构"));
+  assert.ok(h.includes("确认删除"));
+});
+
+test("R4：五类操作（新建任务/记Bug/代码笔记/编辑/删除）均走可靠模态，无原生 prompt/confirm", () => {
+  assert.ok(!devSrc.includes("window.prompt"), "不应再使用 window.prompt");
+  assert.ok(!devSrc.includes("window.confirm"), "不应再使用 window.confirm");
+  for (const fn of ["openTaskModal", "openBugModal", "openSnippetModal", "openRemoveModal"]) {
+    assert.ok(devSrc.includes(fn), `应存在弹窗函数 ${fn}`);
+  }
 });

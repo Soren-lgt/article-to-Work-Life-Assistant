@@ -1,5 +1,5 @@
 // AI生成
-// 开发工作页：开发任务 / Bug 记录 / 代码片段（三 Tab）；代码片段新增/编辑走可靠模态，代码用多行输入框
+// 开发工作页：开发任务 / Bug 记录 / 代码片段（三 Tab）；新增/编辑/删除均走可靠模态弹窗
 import { DevWork, TASK_STATUS, BUG_STATUS } from '../lib/devwork.js';
 import { openModal } from '../ui/modal.js';
 
@@ -23,6 +23,31 @@ export function snippetFormHTML(prefill = {}) {
     <input data-f="desc" value="${v('desc')}" placeholder="用途说明">`;
 }
 
+// 纯函数：开发任务表单（标题 + 所属项目）
+export function taskFormHTML(prefill = {}) {
+  const v = (k) => escapeHtml(prefill[k] == null ? '' : prefill[k]);
+  return `
+    <label>任务标题</label>
+    <input data-f="title" value="${v('title')}" placeholder="要开发的任务">
+    <label>所属项目（可留空，默认未分组）</label>
+    <input data-f="projectName" value="${v('projectName')}" placeholder="未分组">`;
+}
+
+// 纯函数：Bug 表单（标题 + 多行现象描述）
+export function bugFormHTML(prefill = {}) {
+  const v = (k) => escapeHtml(prefill[k] == null ? '' : prefill[k]);
+  return `
+    <label>Bug 标题</label>
+    <input data-f="title" value="${v('title')}" placeholder="Bug 简述">
+    <label>现象描述（可选）</label>
+    <textarea data-f="symptom" rows="4" placeholder="复现步骤 / 现象……">${v('symptom')}</textarea>`;
+}
+
+// 纯函数：删除确认弹窗正文
+export function devConfirmHTML(kindLabel, title) {
+  return `<div>确认删除该${kindLabel}「${escapeHtml(title)}」？此操作不可撤销。</div>`;
+}
+
 export default {
   route: 'devwork',
   title: '开发工作',
@@ -30,6 +55,9 @@ export default {
     const { repo, state } = ctx;
     let tab = 'task';
     const expanded = new Set();
+    let taskRows = [];
+    let bugRows = [];
+    let snippetRows = [];
 
     el.innerHTML = `
       <div class="row" style="margin-bottom:12px;flex-wrap:wrap;gap:8px">
@@ -53,6 +81,7 @@ export default {
     async function renderTasks() {
       addBtn.textContent = '+ 新建任务';
       const groups = await DevWork.groupTasksByProject(repo, state.currentAccountId);
+      taskRows = groups.flatMap((g) => g.tasks);
       if (groups.length === 0) { body.innerHTML = '<div class="card muted">还没有开发任务。</div>'; return; }
       body.innerHTML = groups.map((g) => `
         <div class="card" style="margin-bottom:12px">
@@ -64,7 +93,7 @@ export default {
                 <select data-op="tstatus" data-id="${t.id}">
                   ${TASK_STATUS.map((s) => `<option ${s === t.status ? 'selected' : ''}>${s}</option>`).join('')}
                 </select>
-                <button class="btn" data-op="tedit" data-id="${t.id}" data-title="${escapeHtml(t.title)}" data-proj="${escapeHtml(t.projectName)}" style="padding:2px 8px">编辑</button>
+                <button class="btn" data-op="tedit" data-id="${t.id}" style="padding:2px 8px">编辑</button>
                 <button class="btn danger" data-op="tdel" data-id="${t.id}" style="padding:2px 8px">删除</button>
               </div>`).join('')}
           </div>
@@ -74,6 +103,7 @@ export default {
     async function renderBugs() {
       addBtn.textContent = '+ 记 Bug';
       const bugs = await DevWork.listBugs(repo, state.currentAccountId);
+      bugRows = bugs;
       if (bugs.length === 0) { body.innerHTML = '<div class="card muted">还没有 Bug 记录。</div>'; return; }
       body.innerHTML = `<div class="card">${bugs.map((b) => `
         <div class="row" style="justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line)">
@@ -81,7 +111,7 @@ export default {
           <select data-op="bstatus" data-id="${b.id}">
             ${BUG_STATUS.map((s) => `<option ${s === b.status ? 'selected' : ''}>${s}</option>`).join('')}
           </select>
-          <button class="btn" data-op="bedit" data-id="${b.id}" data-title="${escapeHtml(b.title)}" data-symptom="${escapeHtml(b.symptom || '')}" style="padding:2px 8px">编辑</button>
+          <button class="btn" data-op="bedit" data-id="${b.id}" style="padding:2px 8px">编辑</button>
           <button class="btn danger" data-op="bdel" data-id="${b.id}" style="padding:2px 8px">删除</button>
         </div>`).join('')}</div>`;
     }
@@ -89,6 +119,7 @@ export default {
     async function renderSnippets() {
       addBtn.textContent = '+ 代码笔记';
       const list = await DevWork.listSnippets(repo, state.currentAccountId);
+      snippetRows = list;
       if (list.length === 0) { body.innerHTML = '<div class="card muted">还没有代码片段。</div>'; return; }
       body.innerHTML = `<div class="card">${list.map((s) => `
         <div style="padding:6px 0;border-bottom:1px solid var(--line)">
@@ -113,22 +144,83 @@ export default {
       else await renderSnippets();
     }
 
-    // 代码片段：新增 / 编辑共用模态，代码为多行 textarea，关闭可靠（遮罩/取消/×/提交均可关）
+    // 任务：新增 / 编辑共用模态
+    function openTaskModal(prefill = {}) {
+      if (!accId()) return;
+      const ctl = openModal({
+        title: prefill.id ? '编辑任务' : '新建任务',
+        submitText: prefill.id ? '保存' : '创建',
+        cancelText: '取消',
+        bodyHTML: taskFormHTML(prefill),
+        onSubmit: async () => {
+          const g = (k) => ctl.body.querySelector(`[data-f="${k}"]`).value;
+          const title = g('title').trim();
+          if (!title) { window.alert('任务标题不能为空'); return true; }
+          const projectName = g('projectName').trim();
+          if (prefill.id) await DevWork.updateTask(repo, prefill.id, { title, projectName });
+          else await DevWork.addTask(repo, state.currentAccountId, { title, projectName });
+          await render();
+          return false;
+        },
+      });
+    }
+
+    // Bug：新增 / 编辑共用模态
+    function openBugModal(prefill = {}) {
+      if (!accId()) return;
+      const ctl = openModal({
+        title: prefill.id ? '编辑 Bug' : '记 Bug',
+        submitText: prefill.id ? '保存' : '提交',
+        cancelText: '取消',
+        bodyHTML: bugFormHTML(prefill),
+        onSubmit: async () => {
+          const g = (k) => ctl.body.querySelector(`[data-f="${k}"]`).value;
+          const title = g('title').trim();
+          if (!title) { window.alert('Bug 标题不能为空'); return true; }
+          const symptom = g('symptom').trim();
+          if (prefill.id) await DevWork.updateBug(repo, prefill.id, { title, symptom });
+          else await DevWork.addBug(repo, state.currentAccountId, { title, symptom });
+          await render();
+          return false;
+        },
+      });
+    }
+
+    // 代码片段：新增 / 编辑共用模态，代码为多行 textarea
     function openSnippetModal(prefill = {}) {
       if (!accId()) return;
       const ctl = openModal({
         title: prefill.id ? '编辑代码片段' : '新增代码片段',
         submitText: '保存',
+        cancelText: '取消',
         bodyHTML: snippetFormHTML(prefill),
         onSubmit: async () => {
           const g = (k) => ctl.body.querySelector(`[data-f="${k}"]`).value;
           const title = g('title').trim();
-          if (!title) { window.alert('片段标题不能为空'); return true; } // 校验失败保持弹窗
+          if (!title) { window.alert('片段标题不能为空'); return true; }
           const payload = { title, lang: g('lang').trim(), code: g('code'), desc: g('desc').trim() };
           if (prefill.id) await DevWork.updateSnippet(repo, prefill.id, payload);
           else await DevWork.addSnippet(repo, state.currentAccountId, payload);
           await render();
-          return false; // 成功自动关闭
+          return false;
+        },
+      });
+    }
+
+    // 通用删除确认模态（任务 / Bug / 代码片段）
+    function openRemoveModal(kind, id, title) {
+      const label = { task: '任务', bug: 'Bug', snippet: '代码片段' }[kind];
+      openModal({
+        title: '删除' + label,
+        submitText: '删除',
+        cancelText: '取消',
+        bodyHTML: devConfirmHTML(label, title),
+        onSubmit: async () => {
+          if (kind === 'task') await DevWork.removeTask(repo, id);
+          else if (kind === 'bug') await DevWork.removeBug(repo, id);
+          else await DevWork.removeSnippet(repo, id);
+          await render();
+          return false;
         },
       });
     }
@@ -137,61 +229,31 @@ export default {
       const t = e.target.dataset.tab;
       const op = e.target.dataset.op;
       const act = e.target.dataset.act;
+      const id = e.target.dataset.id;
 
       if (t) { tab = t; await render(); return; }
 
       if (act === 'add') {
-        if (!accId()) return;
-        if (tab === 'task') {
-          const title = window.prompt('任务标题');
-          if (title == null) return;
-          const projectName = window.prompt('所属项目（可留空）', '') || '未分组';
-          try { await DevWork.addTask(repo, state.currentAccountId, { title, projectName }); } catch (err) { window.alert(err.message); return; }
-        } else if (tab === 'bug') {
-          const title = window.prompt('Bug 标题');
-          if (title == null) return;
-          const symptom = window.prompt('现象（可留空）', '') || '';
-          try { await DevWork.addBug(repo, state.currentAccountId, { title, symptom }); } catch (err) { window.alert(err.message); return; }
-        } else {
-          openSnippetModal({});
-        }
-        await render();
+        if (tab === 'task') openTaskModal({});
+        else if (tab === 'bug') openBugModal({});
+        else openSnippetModal({});
         return;
       }
 
-      if (op === 'tdel') { if (window.confirm('删除该任务？')) { await DevWork.removeTask(repo, e.target.dataset.id); await render(); } }
-      else if (op === 'bdel') { if (window.confirm('删除该 Bug？')) { await DevWork.removeBug(repo, e.target.dataset.id); await render(); } }
-      else if (op === 'sdel') { if (window.confirm('删除该片段？')) { await DevWork.removeSnippet(repo, e.target.dataset.id); await render(); } }
-      else if (op === 'sexpand') { const id = e.target.dataset.id; if (expanded.has(id)) expanded.delete(id); else expanded.add(id); await render(); }
+      if (op === 'tdel') { const x = taskRows.find((r) => r.id === id); if (x) openRemoveModal('task', id, x.title); }
+      else if (op === 'bdel') { const x = bugRows.find((r) => r.id === id); if (x) openRemoveModal('bug', id, x.title); }
+      else if (op === 'sdel') { const x = snippetRows.find((r) => r.id === id); if (x) openRemoveModal('snippet', id, x.title); }
+      else if (op === 'sexpand') { if (expanded.has(id)) expanded.delete(id); else expanded.add(id); await render(); }
       else if (op === 'scopy') {
-        const s = await repo.get('devSnippet', e.target.dataset.id);
-        if (s) {
+        const s = snippetRows.find((r) => r.id === id);
+        if (s && typeof navigator !== 'undefined' && navigator.clipboard) {
           try { await navigator.clipboard.writeText(s.code); window.alert('代码已复制'); }
-          catch (err) { window.prompt('复制以下代码', s.code); }
+          catch (err) { window.alert(err.message || '复制失败'); }
         }
       }
-      else if (op === 'sedit') {
-        const s = await repo.get('devSnippet', e.target.dataset.id);
-        if (s) openSnippetModal(s);
-      }
-      else if (op === 'tedit') {
-        const id = e.target.dataset.id;
-        const title = window.prompt('任务标题', e.target.dataset.title);
-        if (title == null) return;
-        const projectName = window.prompt('所属项目', e.target.dataset.proj);
-        if (projectName == null) return;
-        try { await DevWork.updateTask(repo, id, { title, projectName }); await render(); }
-        catch (err) { window.alert(err.message); }
-      }
-      else if (op === 'bedit') {
-        const id = e.target.dataset.id;
-        const title = window.prompt('Bug 标题', e.target.dataset.title);
-        if (title == null) return;
-        const symptom = window.prompt('现象描述', e.target.dataset.symptom);
-        if (symptom == null) return;
-        try { await DevWork.updateBug(repo, id, { title, symptom }); await render(); }
-        catch (err) { window.alert(err.message); }
-      }
+      else if (op === 'tedit') { const x = taskRows.find((r) => r.id === id); if (x) openTaskModal(x); }
+      else if (op === 'bedit') { const x = bugRows.find((r) => r.id === id); if (x) openBugModal(x); }
+      else if (op === 'sedit') { const x = snippetRows.find((r) => r.id === id); if (x) openSnippetModal(x); }
     });
 
     el.addEventListener('change', async (e) => {
