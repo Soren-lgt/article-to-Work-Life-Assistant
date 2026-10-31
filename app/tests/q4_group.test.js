@@ -78,6 +78,15 @@ test("group 模块契约完整", () => {
   assert.equal(typeof group.mount, 'function');
 });
 
+test("H1：附件弹窗删除按钮绑定 data-delatt 并传入正确附件 id 调用删除", () => {
+  const idx = groupSrc.indexOf("[data-delatt]");
+  assert.ok(idx > -1, "存在删除附件按钮绑定");
+  const seg = groupSrc.slice(idx, idx + 700);
+  assert.ok(seg.includes("dataset.delatt"), "删除处理器读取 delatt 附件 id");
+  assert.ok(seg.includes("Task.removeAttachment"), "调用数据层删除附件");
+  assert.ok(!/removeAttachment\(repo, me, b\.dataset\.dl\)/.test(seg), "不得误用下载按钮的 dl 属性");
+});
+
 function stubEl() {
   return {
     innerHTML: "", textContent: "", value: "", dataset: {},

@@ -255,7 +255,7 @@ export default {
         openConfirm({
           title: '删除附件', confirmText: '删除', message: '删除自己上传的该附件？',
           onConfirm: async () => {
-            try { await Task.removeAttachment(repo, me, b.dataset.dl); ctl.close(); await refresh(); }
+            try { await Task.removeAttachment(repo, me, b.dataset.delatt); ctl.close(); await refresh(); }
             catch (e) { window.alert(e.message); }
           },
         });
