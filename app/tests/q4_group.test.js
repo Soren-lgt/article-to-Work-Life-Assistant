@@ -3,7 +3,12 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { MemoryAdapter, Repository } from "../js/lib/db.js";
 import { Group, Task, roleOf, generateJoinCode, isValidJoinCode, resolveAccountByName, buildJoinCode, parseJoinCode, findGroupByJoinCode } from "../js/lib/group.js";
-import group from "../js/modules/group.js";
+import group, { formatDeadline } from "../js/modules/group.js";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
+const here = dirname(fileURLToPath(import.meta.url));
+const groupSrc = readFileSync(join(here, "..", "js/modules/group.js"), "utf8");
 
 function makeRepo() { return new Repository(new MemoryAdapter()); }
 async function setup() {
@@ -100,4 +105,22 @@ test("group 骨架含新建小组/加入小组入口，且邀请按钮文案为�
     assert.ok(el.innerHTML.includes("新建小组"));
     assert.ok(el.innerHTML.includes("加入小组"));
   } finally { uninstallGlobals(); }
+});
+
+test("R5：formatDeadline 将 datetime-local 的 T 转为空格，纯日期与空值安全", () => {
+  assert.equal(formatDeadline("2026-12-31T18:30"), "2026-12-31 18:30");
+  assert.equal(formatDeadline("2026-12-31"), "2026-12-31");
+  assert.equal(formatDeadline(""), "");
+  assert.equal(formatDeadline(null), "");
+});
+
+test("R5：新建任务截止时间输入为 datetime-local（含时:分）", () => {
+  assert.ok(groupSrc.includes('type="datetime-local" data-f="deadline"'), "应使用 datetime-local 输入");
+  assert.ok(!groupSrc.includes('type="date" data-f="deadline"'), "不再使用仅日期输入");
+});
+
+test("R5：addTask 可保存含时分的截止时间字符串", async () => {
+  const { r, g } = await setup();
+  const t = await Task.addTask(r, g.id, "owner1", { title: "联调", deadline: "2026-12-31T18:30" });
+  assert.equal(t.deadline, "2026-12-31T18:30");
 });

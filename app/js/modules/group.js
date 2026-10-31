@@ -10,6 +10,12 @@ function esc(s) {
   }[c]));
 }
 
+// 纯函数：把 datetime-local 的 T 分隔符展示为空格，纯日期原样保留
+export function formatDeadline(s) {
+  if (!s) return '';
+  return String(s).replace('T', ' ');
+}
+
 const CAN_MANAGE = ['owner', 'deputy'];
 
 export default {
@@ -145,7 +151,7 @@ export default {
             <label>描述（可留空）</label><textarea data-f="desc" rows="3" placeholder="补充说明"></textarea>
             <label>指派给（可留空）</label>
             <select data-f="assignee"><option value="">不指派</option>${assigneeOpts}</select>
-            <label>截止时间（可留空）</label><input type="date" data-f="deadline">`,
+            <label>截止时间（可留空，含时:分）</label><input type="datetime-local" data-f="deadline">`,
           onSubmit: async () => {
             const title = ctl.body.querySelector('[data-f="title"]').value.trim();
             if (!title) { window.alert('任务标题不能为空'); return true; }
@@ -247,7 +253,7 @@ export default {
       return `<div class="card" style="padding:8px;margin-bottom:6px">
         <div>${esc(t.title)}${badge}</div>
         ${t.desc ? `<div class="muted" style="margin-top:4px">${esc(t.desc)}</div>` : ''}
-        ${t.deadline ? `<div class="muted" style="margin-top:4px">截止：${esc(t.deadline)}</div>` : ''}
+        ${t.deadline ? `<div class="muted" style="margin-top:4px">截止：${esc(formatDeadline(t.deadline))}</div>` : ''}
         <div class="row" style="gap:6px;flex-wrap:wrap;margin-top:6px">${actions.join('')}</div>
       </div>`;
     }
