@@ -61,8 +61,17 @@ export const Ledger = {
   async addRecord(repo, accountId, { cardId, amount, note = '', date } = {}) {
     if (!cardId) throw new Error('请选择消费分类');
     if (!date) throw new Error('缺少日期');
+    const amt = toAmount(amount);
+    const noteText = String(note || '');
+    // F3：同一账号 + 卡片 + 日期只保留一条；再次写金额为替换，不累加
+    const existing = await repo.list('ledgerRecord', (r) => r.accountId === accountId && r.cardId === cardId && r.date === date);
+    if (existing.length) {
+      const [keep, ...extra] = existing;
+      for (const e of extra) await repo.remove('ledgerRecord', e.id);
+      return repo.put('ledgerRecord', { ...keep, amount: amt, note: noteText });
+    }
     return repo.put('ledgerRecord', {
-      accountId, cardId, amount: toAmount(amount), note: String(note || ''), date, createdAt: Date.now(),
+      accountId, cardId, amount: amt, note: noteText, date, createdAt: Date.now(),
     });
   },
 

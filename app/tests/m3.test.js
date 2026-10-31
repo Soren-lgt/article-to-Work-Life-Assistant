@@ -62,18 +62,18 @@ test('listByDate 账号与日期隔离', async () => {
   assert.equal((await Ledger.listByDate(r, 'u1', '2026-10-31')).length, 1);
 });
 
-test('dayTotal 求和忽略空金额；dayByCard 分类统计', async () => {
+test('dayTotal 求和忽略空金额；dayByCard 分类统计（同卡同日重复写入为替换）', async () => {
   const r = makeRepo();
   const [b, lunch] = await Ledger.ensureDefaultCards(r, 'u1');
   await Ledger.addRecord(r, 'u1', { cardId: b.id, amount: 12, date: '2026-10-31' });
   await Ledger.addRecord(r, 'u1', { cardId: b.id, amount: '', date: '2026-10-31' });
   await Ledger.addRecord(r, 'u1', { cardId: lunch.id, amount: 20, date: '2026-10-31' });
   const t = await Ledger.dayTotal(r, 'u1', '2026-10-31');
-  assert.equal(t.total, 32);
-  assert.equal(t.count, 3);
+  assert.equal(t.total, 20);
+  assert.equal(t.count, 2);
   const byCard = await Ledger.dayByCard(r, 'u1', '2026-10-31');
-  assert.equal(byCard.find((c) => c.cardId === b.id).total, 12);
-  assert.equal(byCard.find((c) => c.cardId === b.id).count, 2);
+  assert.equal(byCard.find((c) => c.cardId === b.id).total, 0);
+  assert.equal(byCard.find((c) => c.cardId === b.id).count, 1);
   assert.equal(byCard.find((c) => c.cardId === lunch.id).total, 20);
 });
 
@@ -106,16 +106,19 @@ test('removeCard 连带删除其记录', async () => {
   assert.equal((await r.all('ledgerRecord')).length, 0);
 });
 
-test("removeRecord 删除单条记录且不影响同日其他记录", async () => {
+test("removeRecord 删除单条记录；同卡同日重复写入被替换为同一条", async () => {
   const r = makeRepo();
-  const [b] = await Ledger.ensureDefaultCards(r, "u1");
+  const [b, lunch] = await Ledger.ensureDefaultCards(r, "u1");
   const r1 = await Ledger.addRecord(r, "u1", { cardId: b.id, amount: 5, date: "2026-10-31" });
   const r2 = await Ledger.addRecord(r, "u1", { cardId: b.id, amount: 6, date: "2026-10-31" });
+  assert.equal(r2.id, r1.id, "同卡同日二次写入沿用同一条记录");
+  assert.equal(r2.amount, 6, "金额替换为新值而非累加");
+  await Ledger.addRecord(r, "u1", { cardId: lunch.id, amount: 20, date: "2026-10-31" });
   await Ledger.removeRecord(r, r1.id);
   assert.equal(await r.get("ledgerRecord", r1.id), null);
   const left = await Ledger.listByDate(r, "u1", "2026-10-31");
   assert.equal(left.length, 1);
-  assert.equal(left[0].id, r2.id);
+  assert.equal(left[0].cardId, lunch.id, "另一张卡同日记录不受影响");
 });
 
 test("removeRecord 不存在记录不报错", async () => {
@@ -123,4 +126,30 @@ test("removeRecord 不存在记录不报错", async () => {
   await Ledger.ensureDefaultCards(r, "u1");
   await Ledger.removeRecord(r, "missing-id");
   assert.equal((await r.all("ledgerRecord")).length, 0);
+});
+
+test("F3 同卡同日重复写金额为替换：id 不变、金额与备注覆盖、记录仍一条", async () => {
+  const r = makeRepo();
+  const [b] = await Ledger.ensureDefaultCards(r, "u1");
+  const r1 = await Ledger.addRecord(r, "u1", { cardId: b.id, amount: 10, note: "早餐", date: "2026-10-31" });
+  const r2 = await Ledger.addRecord(r, "u1", { cardId: b.id, amount: 18, note: "早午餐", date: "2026-10-31" });
+  assert.equal(r2.id, r1.id);
+  assert.equal(r2.amount, 18, "金额替换为 18，不累加成 28");
+  assert.equal(r2.note, "早午餐", "备注同步覆盖");
+  const rows = await Ledger.listByDate(r, "u1", "2026-10-31");
+  assert.equal(rows.length, 1);
+  const day = await Ledger.dayTotal(r, "u1", "2026-10-31");
+  assert.equal(day.total, 18);
+});
+
+test("F3 替换边界：不同日期 / 不同卡片 / 不同账号互不覆盖", async () => {
+  const r = makeRepo();
+  const [b, lunch] = await Ledger.ensureDefaultCards(r, "u1");
+  await Ledger.addRecord(r, "u1", { cardId: b.id, amount: 10, date: "2026-10-31" });
+  await Ledger.addRecord(r, "u1", { cardId: b.id, amount: 12, date: "2026-10-30" }); // 不同日期保留
+  await Ledger.addRecord(r, "u1", { cardId: lunch.id, amount: 20, date: "2026-10-31" }); // 不同卡片保留
+  await Ledger.addRecord(r, "u2", { cardId: b.id, amount: 30, date: "2026-10-31" }); // 不同账号保留
+  assert.equal((await Ledger.listByDate(r, "u1", "2026-10-31")).length, 2);
+  assert.equal((await Ledger.listByDate(r, "u1", "2026-10-30")).length, 1);
+  assert.equal((await Ledger.listByDate(r, "u2", "2026-10-31")).length, 1);
 });
