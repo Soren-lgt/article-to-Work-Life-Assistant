@@ -177,7 +177,7 @@ export default {
       const addRow=()=>{
         list.insertAdjacentHTML('beforeend',`<div class="row" data-optrow="1" style="gap:8px;margin-bottom:8px">
           <input data-opttext placeholder="选项内容" style="flex:1;min-width:0;min-height:40px;border:1px solid var(--line);border-radius:9px;padding:8px">
-          <label class="row" style="gap:4px"><input type="${type==='multiple'?'checkbox':'radio'}" data-optok>正确</label>
+          <label class="row" style="gap:4px"><input type="${type==='multiple'?'checkbox':'radio'}" ${type==='multiple'?'':'name="rec-ok"'} data-optok>正确</label>
           <button type="button" class="btn sm danger" data-rowdel>删</button></div>`);
         const row=list.lastElementChild;
         row.querySelector('[data-rowdel]').onclick=()=>row.remove();
@@ -237,7 +237,7 @@ export default {
           (q.options||[]).forEach(text=>{
             list.insertAdjacentHTML('beforeend',`<div class="row" data-optrow="1" style="gap:8px;margin-bottom:8px">
               <input data-opttext value="${esc(text)}" style="flex:1;min-width:0;min-height:40px;border:1px solid var(--line);border-radius:9px;padding:8px">
-              <label class="row" style="gap:4px"><input type="${typeSel.value==='multiple'?'checkbox':'radio'}" data-optok ${ansSet.has(text)?'checked':''}>正确</label>
+              <label class="row" style="gap:4px"><input type="${typeSel.value==='multiple'?'checkbox':'radio'}" ${typeSel.value==='multiple'?'':'name="rec-ok"'} data-optok ${ansSet.has(text)?'checked':''}>正确</label>
               <button type="button" class="btn sm danger" data-rowdel>删</button></div>`);
             list.lastElementChild.querySelector('[data-rowdel]').onclick=()=>list.lastElementChild.remove();
           });
