@@ -126,7 +126,8 @@ export default {
         onSubmit:async()=>{ if(kind==='task') await DevWork.removeTask(repo,id); else if(kind==='bug') await DevWork.removeBug(repo,id); else await DevWork.removeSnippet(repo,id); await render(); return false; }});
     }
 
-    el.addEventListener('click',async(e)=>{
+    if(el.__clickHandler) el.removeEventListener('click', el.__clickHandler);
+    const onClick=async(e)=>{
       const t=e.target.dataset.tab, op=e.target.dataset.op, act=e.target.dataset.act, id=e.target.dataset.id;
       if(t){ tab=t; await render(); return; }
       if(act==='add'){ if(tab==='task') openTask({}); else if(tab==='bug') openBug({}); else openSnippet({}); return; }
@@ -139,12 +140,16 @@ export default {
       else if(op==='tedit'){ const x=taskRows.find(r=>r.id===id); if(x) openTask(x); }
       else if(op==='bedit'){ const x=bugRows.find(r=>r.id===id); if(x) openBug(x); }
       else if(op==='sedit'){ const x=snippetRows.find(r=>r.id===id); if(x) openSnippet(x); }
-    });
-    el.addEventListener('change',async(e)=>{
+    };
+    el.addEventListener('click', onClick); el.__clickHandler=onClick;
+
+    if(el.__changeHandler) el.removeEventListener('change', el.__changeHandler);
+    const onChange=async(e)=>{
       const op=e.target.dataset.op;
       if(op==='tstatus'){ await DevWork.setTaskStatus(repo,e.target.dataset.id,e.target.value); await render(); }
       else if(op==='bstatus'){ await DevWork.setBugStatus(repo,e.target.dataset.id,e.target.value); await render(); }
-    });
+    };
+    el.addEventListener('change', onChange); el.__changeHandler=onChange;
     if(el.__unsub) el.__unsub();
     el.__unsub=state.subscribe(()=>{ render(); });
     render();
