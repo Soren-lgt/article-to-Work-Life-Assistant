@@ -27,3 +27,15 @@ node_modules/
 # ===== Electron 桌面构建产物（不入库）=====
 desktop/dist/
 desktop/dist-win/
+
+# ===== 本地用户数据备份（运行产物，不入库）=====
+data_log/
+
+# ===== 设计风格草稿与页面自检产物（不入库）=====
+style-preview/
+style-references.html
+style-showcase.html
+PostHog风格-开发提示词.md
+
+# ===== 桌面端依赖锁文件（本项目惯例不提交）=====
+desktop/package-lock.json
