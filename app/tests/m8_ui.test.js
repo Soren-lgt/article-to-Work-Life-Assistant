@@ -30,12 +30,13 @@ test('app.css 对超长文本设防溢出（overflow-wrap）', () => {
   assert.match(css, /overflow-wrap:\s*anywhere/);
 });
 
-test('index.html 顶部工具条含账号切换/通知/快速备忘三要素与三层框架', () => {
+test('index.html 顶部工具条含账号切换/通知，且已移除快速备忘输入框；含三层框架', () => {
   const html = readFileSync(join(appDir, 'index.html'), 'utf8');
   assert.match(html, /id="accountBtn"/);
   assert.match(html, /id="notifyBell"/);
   assert.match(html, /id="notifyBadge"/);
-  assert.match(html, /id="quickMemo"/);
+  assert.doesNotMatch(html, /id="quickMemo"/);
+  assert.doesNotMatch(html, /快速备忘，回车保存/);
   assert.match(html, /class="sidebar"/);
   assert.match(html, /class="topbar"/);
   assert.match(html, /class="content"/);

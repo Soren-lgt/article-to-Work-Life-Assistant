@@ -37,7 +37,7 @@ test('index.html 含 7 个导航项与 7 个模块容器，且与模块一一对
     assert.match(html, new RegExp(`data-route="${name}"`), `缺少导航 ${name}`);
     assert.match(html, new RegExp(`data-module="${name}"`), `缺少模块容器 ${name}`);
   }
-  assert.match(html, /id="quickMemo"/);
+  assert.doesNotMatch(html, /id="quickMemo"/);
   assert.match(html, /id="notifyBadge"/);
   assert.match(html, /id="accountBtn"/);
 });

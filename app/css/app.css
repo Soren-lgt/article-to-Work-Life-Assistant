@@ -118,14 +118,6 @@ html, body {
 
 .topbar-right { display: flex; align-items: center; gap: 10px; }
 
-.quick-memo {
-  width: 220px;
-  padding: 7px 10px;
-  border: 1px solid var(--line);
-  border-radius: var(--rbtn);
-  background: var(--bg);
-  color: var(--text);
-}
 
 .bell {
   position: relative;

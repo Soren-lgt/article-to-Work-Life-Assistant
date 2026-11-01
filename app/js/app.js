@@ -4,7 +4,6 @@ import { createRepository, IdbAdapter, MemoryAdapter } from './lib/db.js';
 import { AppState } from './appstate.js';
 import { todayStr } from './lib/utils.js';
 import { Accounts } from './lib/accounts.js';
-import { Memo } from './lib/memo.js';
 import { Group } from './lib/group.js';
 import { openModal, openConfirm, openPrompt } from './ui/modal.js';
 import { loadPrefs, applyTheme, ensureThemeCss } from './modules/settings.js';
@@ -316,20 +315,6 @@ function bindTopbar() {
   if (btn) btn.addEventListener('click', openAccountManager);
 }
 
-function bindQuickMemo() {
-  const input = document.getElementById('quickMemo');
-  if (!input) return;
-  input.addEventListener('keydown', async (e) => {
-    if (e.key !== 'Enter') return;
-    const text = input.value.trim();
-    if (!text) return;
-    const accId = AppState.currentAccountId;
-    if (!accId) { window.alert('请先创建并登录账号'); return; }
-    await Memo.add(App.repo, accId, text);
-    input.value = '';
-    AppState.emit();
-  });
-}
 
 let lastAccId = null;
 
@@ -356,7 +341,6 @@ async function boot() {
   window.__app = App;
 
   bindTopbar();
-  bindQuickMemo();
   bindNotify();
 
   if (!location.hash) location.hash = '#' + (prefs.defaultRoute || 'home');

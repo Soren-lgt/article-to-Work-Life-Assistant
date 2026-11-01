@@ -24,6 +24,19 @@ const MODULE_LABELS = {
   accounts: '账号',
 };
 
+export const OVERVIEW_HIDDEN_KEYS = ['today'];
+
+// 数据概览统计行：按模块汇总各 store 条数；OVERVIEW_HIDDEN_KEYS 中的模块不在概览展示（功能仍可在「数据清理」单独清空）
+export function buildOverviewRows(modules, labels, stats) {
+  return Object.entries(modules)
+    .filter(([key]) => !OVERVIEW_HIDDEN_KEYS.includes(key))
+    .map(([key, stores]) => ({
+      key,
+      label: labels[key] || key,
+      count: stores.reduce((s, name) => s + (stats[name] || 0), 0),
+    }));
+}
+
 export function applyTheme(theme) {
   const norm = normalizeTheme(theme);
   const legacyDark = theme === 'dark';
@@ -69,10 +82,9 @@ function render(el, ctx) {
 
   async function refreshStats() {
     const stats = await Backup.stats(repo);
-    const rows = Object.entries(Backup.MODULES).map(([key, stores]) => {
-      const n = stores.reduce((s, name) => s + (stats[name] || 0), 0);
+    const rows = buildOverviewRows(Backup.MODULES, MODULE_LABELS, stats).map((row) => {
       return `<div class="row" style="justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--line)">
-        <span>${MODULE_LABELS[key] || key}</span><span class="muted">${n} 条</span></div>`;
+        <span>${row.label}</span><span class="muted">${row.count} 条</span></div>`;
     });
     statBox.innerHTML = rows.join('');
   }
