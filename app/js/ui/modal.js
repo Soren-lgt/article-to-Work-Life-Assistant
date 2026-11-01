@@ -48,7 +48,9 @@ export function openModal(options = {}) {
   }
 
   const q = (sel) => overlay.querySelector(sel);
-  overlay.addEventListener("mousedown", (e) => { if (isOverlayClick(overlay, e.target)) close(); });
+  const onMaskClose = (e) => { if (isOverlayClick(overlay, e.target)) close(); };
+  overlay.addEventListener("mousedown", onMaskClose);
+  overlay.addEventListener("click", onMaskClose);
   if (typeof onDocument === "function") overlay.addEventListener("click", (e) => onDocument(e));
   const cancelBtn = q("[data-m-cancel]");
   const closeBtn = q("[data-m-close]");
@@ -63,7 +65,6 @@ export function openModal(options = {}) {
     if (!selfHandled) close();
   });
 
-  if (doc.body && typeof doc.body.appendChild === "function") doc.body.appendChild(overlay);
   if (doc.body && typeof doc.body.appendChild === "function") doc.body.appendChild(overlay);
   return { close, overlay, body: q(".modal-body"), closed: () => closed };
 }
