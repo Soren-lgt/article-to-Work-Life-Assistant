@@ -31,7 +31,7 @@ export default {
       const groups=await Group.listForAccount(repo,accId);
       if(v.groupId && !groups.some(g=>g.id===v.groupId)) v.groupId=null;
       if(!v.groupId && groups.length) v.groupId=groups[0].id;
-      groupsBar.innerHTML=groups.map(g=>`<button class="btn sm ${g.id===v.groupId?'primary':''}" data-g="${g.id}">${esc(g.name)}<span class="muted">(${g.role==='owner'?'组长':g.role==='deputy'?'副组长':'成员'})</span></button>`).join('');
+      groupsBar.innerHTML=groups.map(g=>`<button class="btn sm ${g.id===v.groupId?'primary':''}" data-g="${g.id}">${esc(g.name)}<span class="role-inline">(${g.role==='owner'?'组长':g.role==='deputy'?'副组长':'成员'})</span></button>`).join('');
       groupsBar.querySelectorAll('[data-g]').forEach(b=>{ b.onclick=()=>{ v.groupId=b.dataset.g; state.set({currentGroupId:v.groupId}); v.tab='project'; refresh(); }; });
       if(!v.groupId){ body.innerHTML='<div class="card muted">还没有加入小组，点上方「新建小组」或「加入小组」。</div>'; return; }
 

@@ -115,3 +115,4 @@ input,textarea,select{ font:inherit; color:var(--fg); }
 /* 小组 */
 .member-row{ display:flex; align-items:center; gap:8px; padding:9px 4px; border-bottom:1px solid var(--line); }
 .deadline{ color:var(--warn); font-size:12px; }
+.role-inline{ color:inherit; font-size:inherit; }
