@@ -131,3 +131,33 @@ test('开发：完成态收通知，片段不进提醒，删除不发提醒', ()
   assert.ok(!devwork.includes('新增代码片段：'), '代码片段没有完成状态，不进提醒');
   assert.ok(!devwork.includes("'删除'+label+'：'+title"), '删除不发提醒');
 });
+
+test('同一个待办只占一份角标：多条通知合并成最新一条', async () => {
+  const repo = multiRepo({
+    todoplan: [{ id: 'p1', done: false }, { id: 'p2', done: false }],
+    notification: [
+      { id: 'a1', accountId: ACC, toAccountId: ACC, kind: 'plan', refType: 'plan', refId: 'p1', title: '新增计划：写周报', read: false, createdAt: 10 },
+      { id: 'a2', accountId: ACC, toAccountId: ACC, kind: 'plan', refType: 'plan', refId: 'p1', title: '修改计划：写周报', read: false, createdAt: 20 },
+      { id: 'a3', accountId: ACC, toAccountId: ACC, kind: 'plan', refType: 'plan', refId: 'p1', title: '计划待完成：写周报', read: false, createdAt: 30 },
+      { id: 'b1', accountId: ACC, toAccountId: ACC, kind: 'plan', refType: 'plan', refId: 'p2', title: '新增计划：交表', read: false, createdAt: 40 },
+    ],
+  });
+  const rows = await listNotices(repo, ACC);
+  assert.equal(rows.length, 2, '两个待办 = 两条提醒');
+  assert.equal(rows.find((n) => n.refId === 'p1').id, 'a3', '同一待办取最新那条');
+  assert.equal(await unreadCount(repo, ACC), 2, '角标按待办份数算');
+});
+
+test('完成一个待办，角标只减那一份', async () => {
+  const repo = multiRepo({
+    todoplan: [{ id: 'p1', done: false }, { id: 'p2', done: false }],
+    notification: [
+      { id: 'a1', accountId: ACC, toAccountId: ACC, kind: 'plan', refType: 'plan', refId: 'p1', title: '新增计划：写周报', read: false, createdAt: 10 },
+      { id: 'a2', accountId: ACC, toAccountId: ACC, kind: 'plan', refType: 'plan', refId: 'p1', title: '修改计划：写周报', read: false, createdAt: 20 },
+      { id: 'b1', accountId: ACC, toAccountId: ACC, kind: 'plan', refType: 'plan', refId: 'p2', title: '新增计划：交表', read: false, createdAt: 30 },
+    ],
+  });
+  assert.equal(await unreadCount(repo, ACC), 2);
+  await pruneNotices(repo, { refId: 'p1', refType: 'plan' });
+  assert.equal(await unreadCount(repo, ACC), 1, '只少了写周报那一份，交表还在');
+});

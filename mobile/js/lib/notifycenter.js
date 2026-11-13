@@ -1,6 +1,7 @@
 // 通知中心（手机版）：铃铛里不只有同组消息，计划、开发的关键动作也记成通知
 // 只提醒"还没做完的"：通知带 refType/refId，读取时按关联对象的当前状态过滤；
 // 对象完成/删除后，相关通知由 pruneNotices 收掉，不再占未读数。
+// 同一个待办只占一份角标：同一对象的多条通知在铃铛里合并成最新的一条。
 import { publishNotice } from './push.js';
 
 export const NOTICE_KINDS = { plan: '计划', dev: '开发', group: '同组' };
@@ -63,6 +64,7 @@ export async function isPending(repo, notice) {
 }
 
 // 当前账号的通知，按时间倒序；默认只给"还要做的"（opts.onlyPending === false 可取全部历史）
+// 同一对象的多条通知只留一条（优先未读、取最新），这样完成一件事角标只减一份。
 export async function listNotices(repo, accountId, opts) {
   if (!repo || !accountId) return [];
   const options = opts || {};
@@ -72,11 +74,18 @@ export async function listNotices(repo, accountId, opts) {
   );
   const sorted = rows.slice().sort((a, b) => (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0));
   if (options.onlyPending === false) return sorted;
-  const out = [];
+
+  const byRef = new Map();
+  const plain = [];
   for (const n of sorted) {
-    if (await isPending(repo, n)) out.push(n);
+    if (!(await isPending(repo, n))) continue; // 已经做完 / 已删除的，直接不显示
+    const key = n.refType && n.refId ? n.refType + ':' + n.refId : null;
+    if (!key) { plain.push(n); continue; }
+    const cur = byRef.get(key);
+    if (!cur || (cur.read && !n.read)) byRef.set(key, n); // 未读优先，其次取最新（sorted 已倒序）
   }
-  return out;
+  return plain.concat(Array.from(byRef.values()))
+    .sort((a, b) => (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0));
 }
 
 export async function unreadCount(repo, accountId) {
@@ -91,6 +100,7 @@ export async function markRead(repo, id) {
   return true;
 }
 
+// 全部已读：把当前铃铛里看得到的那些（合并后的每一条）标为已读
 export async function markAllRead(repo, accountId) {
   const rows = await listNotices(repo, accountId);
   let changed = 0;
