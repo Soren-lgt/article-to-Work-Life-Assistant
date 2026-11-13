@@ -1,10 +1,21 @@
-// 题库（移动版）：分类题库管理 + 顺序练习 + 跨库随机考试 + 判分 + 成绩历史
-import { Quiz } from '../../../app/js/lib/quiz.js';
+// 题库（移动版）：分类题库管理 + 跨库顺序练习（按题型排序） + 按题型配额随机考试 + 判分 + 成绩历史
+import { Quiz, QUESTION_TYPE_ORDER as QUIZ_TYPE_ORDER } from '../../../app/js/lib/quiz.js';
 import { gradeQuestion, filterWrong, accuracy } from '../../../app/js/lib/scoring.js';
 import { openModal, openConfirm } from '../../../app/js/ui/modal.js';
+import { parseDictation, buildVoiceGuideHTML } from '../../../app/js/lib/quizvoiceform.js';
+import { pickChoiceIndexes, appendVoiceText } from '../../../app/js/lib/quizvoice.js';
+import { speechAvailable, createDictation } from '../lib/mvoice.js';
 
 let runnerCtl = null;
+// 手机版同样要区分「代码主动关闭」与「用户点 × 关闭」，后者等同取消
+let runnerClosing = false;
+let runnerVoice = null;
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+// 话筒图标（纯 SVG，与电脑版同款造型）
+const MIC_SVG = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><rect x="9" y="2.5" width="6" height="11" rx="3" fill="currentColor"/><path d="M6 11a6 6 0 0 0 12 0" fill="none" stroke="currentColor" stroke-width="1.6"/><line x1="12" y1="17" x2="12" y2="21" stroke="currentColor" stroke-width="1.6"/><line x1="8.5" y1="21" x2="15.5" y2="21" stroke="currentColor" stroke-width="1.6"/></svg>';
+function micBtnHTML(){ return `<button type="button" class="btn sm mic-btn" data-act="voice" title="按一下，说一句" aria-label="语音输入">${MIC_SVG}</button>`; }
+function voiceOn(){ return speechAvailable(); }
 
 export default {
   route:'quiz', title:'题库',
@@ -31,9 +42,10 @@ export default {
             <button class="btn sm primary" data-act="newBank">新建题库</button></span>`;
       catsBar.querySelectorAll('[data-cat]').forEach(b=>{ b.onclick=()=>{ v.cat=b.dataset.cat; v.bankId=null; v.screen='manage'; refresh(); }; });
       catsBar.querySelector('[data-act="practice"]').onclick=async()=>{
-        const list=await currentQuestions();
-        if(!v.bankId){ window.alert('请先进入一个题库再开始练习。'); return; }
-        if(!(list.length>0)){ window.alert('当前题库还没有题目，请先添加题目。'); return; }
+        // 顺序练习：从「选择」第一个题库串到「代码」最后一个题库，题目按 单选/多选/判断/问答/代码 排序
+        if(!state.currentAccountId){ window.alert('请先登录账号'); return; }
+        const list=await Quiz.practiceQuestions(repo,state.currentAccountId);
+        if(!(list.length>0)){ window.alert('题库中还没有任何题目，请先添加题目。'); return; }
         startRunner('practice',list);
       };
       catsBar.querySelector('[data-act="examSetup"]').onclick=async()=>{
@@ -102,16 +114,25 @@ export default {
       main.querySelectorAll('[data-editq]').forEach(b=>{ b.onclick=async()=>{ const list=await currentQuestions(); const q=list.find(x=>x.id===b.dataset.editq); if(q) openEditQuestionModal(q); }; });
 
       const setup=main.querySelector('[data-el="setup"]');
+      const allQs = accId ? await Quiz.listAllQuestions(repo,accId) : [];
+      const counts = Quiz.typeCounts(allQs);
+      const stock = QUIZ_TYPE_ORDER.map(t=>`${Quiz.typeLabel(t)} ${counts[t]||0}`).join(' / ');
       setup.innerHTML = v.showSetup ? `
-        <div class="field"><label>抽题数</label><input data-el="cnt" type="number" min="1" value="10"></div>
-        <div class="field"><label>时长（分钟）</label><input data-el="mins" type="number" min="1" value="10"></div>
-        <button class="btn primary block" data-act="startExam">开始考试</button>` : '<div class="muted">点上方“考试模式”设置抽题数与时长。</div>';
+        <div class="muted">考试按题型随机抽取：${Quiz.examPlanText()}</div>
+        <div class="muted">现有题目：${stock}</div>
+        <div class="row" style="gap:8px;align-items:center;margin-top:8px">
+          <span class="muted">时长(分钟)</span><input data-el="mins" type="number" min="1" value="30" style="width:80px">
+          <button class="btn primary" data-act="startExam">开始考试</button>
+        </div>` : '<div class="muted">点上方“考试模式”设置时长。</div>';
       if(v.showSetup) setup.querySelector('[data-act="startExam"]').onclick=async()=>{
-        const list=await Quiz.listAllQuestions(repo,state.currentAccountId); if(!list.length) return;
-        const cnt=Math.max(1,Math.min(list.length,Number(setup.querySelector('[data-el="cnt"]').value)||1));
-        const mins=Math.max(1,Number(setup.querySelector('[data-el="mins"]').value)||10);
-        const picked=Quiz.drawQuestions(list,cnt);
-        v.deadline=Date.now()+mins*60000; startRunner('exam',picked);
+        const all=await Quiz.listAllQuestions(repo,state.currentAccountId);
+        if(!all.length){ window.alert('题库中还没有任何题目，请先添加题目。'); return; }
+        // 按 20 单选 / 5 多选 / 10 判断 / 5 问答 / 2 代码 定量随机抽取（共 42 题）
+        const draw=Quiz.drawExamQuestions(all);
+        if(!draw.list.length){ window.alert('题目不足，无法开始考试。'); return; }
+        const mins=Math.max(1,Number(setup.querySelector('[data-el="mins"]').value)||30);
+        v.deadline=Date.now()+mins*60000;
+        startRunner('exam',draw.list);
       };
 
       const hist=main.querySelector('[data-el="history"]');
@@ -160,13 +181,16 @@ export default {
           <div class="field"><label>参考代码</label><textarea data-f="refCode" rows="6" spellcheck="false"></textarea></div>
           <div class="field"><label>提示（可选）</label><input data-f="hint"></div>`;
       }
-      return `<div class="field"><label>题干</label><input data-f="stem" placeholder="题目题干"></div>${extra}`;
+      const head = cat === 'code' ? '' : `${buildVoiceGuideHTML(cat)}<div class="muted" data-el="vmsg" style="min-height:16px"></div>`;
+      return `${head}<div class="field"><label>题干</label><input data-f="stem" placeholder="题目题干"></div>${extra}`;
     }
     function bindQuestionForm(cat,ctl){
-      if(cat!=='choice') return;
+      const voiceHandle=bindFormVoice(cat,ctl);
+      if(cat!=='choice') return voiceHandle;
       const typeSel=ctl.body.querySelector('[data-f="type"]');
       renderChoiceOptions(ctl,typeSel.value);
       typeSel.onchange=()=>renderChoiceOptions(ctl,typeSel.value);
+      return voiceHandle;
     }
     function renderChoiceOptions(ctl,type){
       const box=ctl.body.querySelector('[data-opts]');
@@ -184,6 +208,117 @@ export default {
       };
       box.querySelector('[data-addopt]').onclick=addRow; addRow(); addRow();
     }
+    // ---------- 语音：手机版走浏览器自带的 SpeechRecognition ----------
+    function idleMic(btn, msg){
+      if(btn){ btn.classList.remove('rec'); btn.title='按一下，说一句'; }
+      if(msg) msg.textContent='';
+    }
+    // 题干说一句话就回填整张表单
+    function bindFormVoice(cat, ctl){
+      if(!voiceOn()) return null;
+      const btn=ctl.overlay.querySelector('[data-act="voice"]');
+      if(!btn) return null;
+      const msg=ctl.body.querySelector('[data-el="vmsg"]');
+      let d=null;
+      btn.onclick=()=>{
+        if(d && d.isRunning()){ d.stop(); return; }
+        d=createDictation({
+          onState:(s)=>{ if(s==='listening'){ btn.classList.add('rec'); btn.title='再点一下结束'; if(msg) msg.textContent='正在听…'; } },
+          onPartial:(t)=>{ if(msg) msg.textContent=t?('在听：'+t):'正在听…'; },
+          onFinal:(t)=>{ idleMic(btn,msg); const p=parseDictation(t); const note=applyDictation(cat,ctl,p); if(msg) msg.textContent=note||('已识别：'+t); },
+          onError:(e)=>{ idleMic(btn,msg); if(msg) msg.textContent=e; },
+        });
+        if(!d.start()) idleMic(btn,msg);
+      };
+      return { stop:()=>{ if(d && d.isRunning()) d.stop(); } };
+    }
+    function choiceRowHTML(type, text, ok){
+      return `<div class="row" data-optrow="1" style="gap:8px;margin-bottom:8px">
+        <input data-opttext value="${esc(text)}" style="flex:1;min-width:0;min-height:40px;border:1px solid var(--line);border-radius:9px;padding:8px">
+        <label class="row" style="gap:4px"><input type="${type==='multiple'?'checkbox':'radio'}" ${type==='multiple'?'':'name="rec-ok"'} data-optok ${ok?'checked':''}>正确</label>
+        <button type="button" class="btn sm danger" data-rowdel>删</button></div>`;
+    }
+    function applyDictation(cat, ctl, p){
+      if(!p || !p.ok) return '没听懂，换个说法再说一遍';
+      const g=(k)=>ctl.body.querySelector(`[data-f="${k}"]`);
+      const labels={choice:'选择',qa:'问答',code:'代码'};
+      const filled=[];
+      const stemInput=g('stem');
+      if(p.stem && stemInput){ stemInput.value=p.stem; filled.push('题干'); }
+      const sameCat=!p.category || p.category===cat;
+      if(sameCat){
+        if(cat==='choice'){
+          const typeSel=g('type');
+          const type=p.type || (typeSel?typeSel.value:'single');
+          if(typeSel && typeSel.value!==type){ typeSel.value=type; renderChoiceOptions(ctl,type); }
+          if(type==='judge'){
+            if(p.judgeAnswer){
+              const pick=ctl.body.querySelector(`input[name="jok"][value="${p.judgeAnswer}"]`);
+              if(pick){ pick.checked=true; filled.push('判断答案'); }
+            }
+          }else if(Array.isArray(p.options) && p.options.length){
+            const list=ctl.body.querySelector('[data-optlist]');
+            if(list){
+              const letters=Array.isArray(p.answerLetters)?p.answerLetters:[];
+              list.innerHTML='';
+              p.options.forEach((o,i)=>{
+                const mark=letters.includes(o.letter || String.fromCharCode(65+i));
+                list.insertAdjacentHTML('beforeend', choiceRowHTML(type, o.text, mark));
+                const row=list.lastElementChild;
+                const del=row.querySelector('[data-rowdel]');
+                if(del) del.onclick=()=>row.remove();
+              });
+              filled.push('选项');
+            }
+          }
+          if(p.analysis && g('analysis')){ g('analysis').value=p.analysis; filled.push('解析'); }
+        }else if(cat==='qa'){
+          if(p.refAnswer && g('answer')){ g('answer').value=p.refAnswer; filled.push('参考答案'); }
+          if(p.keywords && p.keywords.length && g('keywords')){ g('keywords').value=p.keywords.join(','); filled.push('关键词'); }
+        }else{
+          if(p.lang && g('lang')){ g('lang').value=p.lang; filled.push('语言'); }
+          if(p.refCode && g('refCode')){ g('refCode').value=p.refCode; filled.push('参考代码'); }
+          if(p.hint && g('hint')){ g('hint').value=p.hint; filled.push('提示'); }
+        }
+      }
+      if(!filled.length) return '没听出能填的字段，再说一遍';
+      if(!sameCat) return `这是${labels[p.category]||''}题，先只填了题干`;
+      const miss=(p.missing && p.missing.length)?`（还差：${p.missing.join('、')}）`:'';
+      return '已填：'+filled.join('、')+miss;
+    }
+    // 答题窗：选择题选答案，问答题/代码题把话写进作答框
+    function bindRunnerVoice(q, body){
+      if(!voiceOn()) return null;
+      const btn=body.querySelector('[data-act="voice"]');
+      if(!btn) return null;
+      const msg=body.querySelector('[data-el="vmsg"]');
+      let d=null;
+      btn.onclick=()=>{
+        if(d && d.isRunning()){ d.stop(); return; }
+        d=createDictation({
+          onState:(s)=>{ if(s==='listening'){ btn.classList.add('rec'); btn.title='再点一下结束'; if(msg) msg.textContent='正在听…'; } },
+          onPartial:(t)=>{ if(msg) msg.textContent=t?('在听：'+t):'正在听…'; },
+          onFinal:(t)=>{ idleMic(btn,msg); applyRunnerVoice(q,t,body,msg); },
+          onError:(e)=>{ idleMic(btn,msg); if(msg) msg.textContent=e; },
+        });
+        if(!d.start()) idleMic(btn,msg);
+      };
+      return { stop:()=>{ if(d && d.isRunning()) d.stop(); } };
+    }
+    function applyRunnerVoice(q, text, body, msg){
+      if(q.categoryKey==='choice' && Array.isArray(q.options) && q.options.length){
+        const idxs=pickChoiceIndexes(text, q.options, {multiple:q.type==='multiple'});
+        if(!idxs.length){ if(msg) msg.textContent='没对上选项，换种说法再试'; return; }
+        const inputs=Array.from(body.querySelectorAll('[name="opt"]'));
+        idxs.forEach((i)=>{ if(inputs[i]) inputs[i].checked=true; });
+        if(msg) msg.textContent='已选：'+idxs.map((i)=>q.options[i]).join('、');
+        return;
+      }
+      const ta=body.querySelector('[data-ans]');
+      if(ta){ ta.value=appendVoiceText(ta.value, text); if(msg) msg.textContent='已写进作答框'; return; }
+      if(msg) msg.textContent='这题没有能写入的输入框';
+    }
+
     function collectQuestion(cat,ctl){
       const g=k=>ctl.body.querySelector(`[data-f="${k}"]`);
       const stem=g('stem').value.trim(); if(!stem) return {__error:'题干不能为空'};
@@ -212,20 +347,26 @@ export default {
       return data;
     }
     function openAddQuestionModal(){
+      let voiceHandle=null;
       const ctl=openModal({title:'添加题目',submitText:'保存题目',cancelText:'取消',bodyHTML:buildQuestionForm(v.cat),
+        footExtra:(v.cat==='code'||!voiceOn())?'':micBtnHTML(),
+        onClose:()=>{ if(voiceHandle){ try{voiceHandle.stop();}catch(e){} } },
         onSubmit:async()=>{ const data=collectQuestion(v.cat,ctl);
           if(data.__error){ window.alert(data.__error); return true; }
           try{ await Quiz.addQuestion(repo,v.bankId,data); }catch(e){ window.alert(e.message); return true; }
           await refresh(); return false; }});
-      bindQuestionForm(v.cat,ctl);
+      voiceHandle=bindQuestionForm(v.cat,ctl);
     }
     function openEditQuestionModal(q){
+      let voiceHandle=null;
       const ctl=openModal({title:'编辑题目',submitText:'保存修改',cancelText:'取消',bodyHTML:buildQuestionForm(q.categoryKey),
+        footExtra:(q.categoryKey==='code'||!voiceOn())?'':micBtnHTML(),
+        onClose:()=>{ if(voiceHandle){ try{voiceHandle.stop();}catch(e){} } },
         onSubmit:async()=>{ const data=collectQuestion(q.categoryKey,ctl);
           if(data.__error){ window.alert(data.__error); return true; }
           try{ await Quiz.updateQuestion(repo,q.id,data); }catch(e){ window.alert(e.message); return true; }
           await refresh(); return false; }});
-      bindQuestionForm(q.categoryKey,ctl);
+      voiceHandle=bindQuestionForm(q.categoryKey,ctl);
       const g=k=>ctl.body.querySelector(`[data-f="${k}"]`);
       g('stem').value=q.stem||'';
       if(q.categoryKey==='choice'){
@@ -248,13 +389,29 @@ export default {
     }
 
     // ---------- 答题 ----------
+    // 点右上角 × 等同取消：停计时、断句柄、回题库管理，绝不让旧句柄挡住下一次开始
     function openRunnerModal(){
-      if(runnerCtl) return;
-      runnerCtl=openModal({title:v.mode==='exam'?'考试模式':'顺序练习',footer:false,bodyHTML:'<div data-el="rbody"></div>'});
+      if(runnerCtl && !runnerCtl.closed()) return;
+      runnerCtl=null;
+      runnerCtl=openModal({title:v.mode==='exam'?'考试模式':'顺序练习',footer:false,bodyHTML:'<div data-el="rbody"></div>',
+        onClose:()=>{
+          if(runnerClosing){ runnerClosing=false; return; }
+          cleanupRunner();
+          v.screen='manage'; v.qs=[]; v.i=0; v.ans={}; v.fb={}; v.results=[]; v.summary=null;
+          refresh();
+        }});
+    }
+    // 统一收尾：停计时、断开弹窗句柄（幂等，多处调用无副作用）
+    function cleanupRunner(){
+      if(el.__timer){ clearInterval(el.__timer); el.__timer=null; }
+      if(runnerVoice){ try{runnerVoice.stop();}catch(e){} runnerVoice=null; }
+      runnerCtl=null;
     }
     function closeRunner(){
-      if(el.__timer){ clearInterval(el.__timer); el.__timer=null; }
-      if(runnerCtl){ try{runnerCtl.close();}catch(e){} runnerCtl=null; }
+      runnerClosing=true;
+      const c=runnerCtl;
+      cleanupRunner();
+      if(c){ try{c.close();}catch(e){} }
     }
     function startRunner(mode,qs){
       v.mode=mode; v.qs=qs; v.i=0; v.ans={}; v.fb={}; v.results=[]; v.screen='runner'; v.startedAt=Date.now();
@@ -293,9 +450,11 @@ export default {
           <button class="btn sm" data-act="prev" ${v.i===0?'disabled':''}>上一题</button>
           ${v.mode==='practice'?'<button class="btn sm primary" data-act="check">提交本题</button>':''}
           <button class="btn sm" data-act="next" ${v.i>=v.qs.length-1?'disabled':''}>下一题</button>
+          ${voiceOn()?'<button type="button" class="btn sm mic-btn" data-act="voice" title="按一下，说一句" aria-label="语音输入">'+MIC_SVG+'</button>':''}
           <button class="btn sm danger" data-act="quit">退出</button>
           ${v.mode==='exam'?'<button class="btn sm primary" data-act="submit">交卷</button>':'<button class="btn sm" data-act="finish">结束练习</button>'}
-        </div>`;
+        </div>
+        <div class="muted" data-el="vmsg" style="min-height:16px;margin-top:6px"></div>`;
     }
     function renderRunner(){
       const q=v.qs[v.i]; if(!runnerCtl) openRunnerModal();
@@ -317,6 +476,7 @@ export default {
       const sub=body.querySelector('[data-act="submit"]');
       if(sub) sub.onclick=()=>openConfirm({title:'交卷确认',message:'确定交卷？',confirmText:'交卷',onConfirm:()=>finishExam()});
       body.querySelector('[data-act="quit"]').onclick=()=>{ closeRunner(); v.screen='manage'; refresh(); };
+      if(voiceOn()) runnerVoice=bindRunnerVoice(q, body);
     }
     function finishExam(){ v.ans[v.i]=collectAnswer(v.qs[v.i]); finish(true); }
     async function finish(){

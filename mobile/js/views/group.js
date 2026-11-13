@@ -33,7 +33,7 @@ export default {
       if(!v.groupId && groups.length) v.groupId=groups[0].id;
       groupsBar.innerHTML=groups.map(g=>`<button class="btn sm ${g.id===v.groupId?'primary':''}" data-g="${g.id}">${esc(g.name)}<span class="role-inline">(${g.role==='owner'?'组长':g.role==='deputy'?'副组长':'成员'})</span></button>`).join('');
       groupsBar.querySelectorAll('[data-g]').forEach(b=>{ b.onclick=()=>{ v.groupId=b.dataset.g; state.set({currentGroupId:v.groupId}); v.tab='project'; refresh(); }; });
-      if(!v.groupId){ body.innerHTML='<div class="card muted">还没有加入小组，点上方「新建小组」或「加入小组」。</div>'; return; }
+      if(!v.groupId){ body.innerHTML='<div class="card muted">你还没有加入任何小组，点上方「新建小组」或「加入小组」。</div>'; return; }
 
       const role=await roleNow();
       const tabs=[['project','项目'],['member','成员'],['log','日志'],['notice','通知']];
@@ -67,7 +67,7 @@ export default {
       if(v.projectId && !projects.some(p=>p.id===v.projectId)) v.projectId=null;
       pane.innerHTML=`<div class="card">
           <div class="row between"><strong>项目</strong>
-            ${CAN_MANAGE.includes(role)?'<button class="btn sm primary" data-act="newProject">+ 新建项目</button>':'<span class="muted">仅组长/副组长可管理</span>'}</div>
+            ${CAN_MANAGE.includes(role)?'<button class="btn sm primary" data-act="newProject">+ 新建项目</button>':'<span class="muted">仅组长/副组长可管理项目</span>'}</div>
           <div class="row wrap" data-el="plist" style="gap:8px;margin-top:8px"></div></div>
         <div data-el="board"></div>`;
       const plist=pane.querySelector('[data-el="plist"]');
@@ -178,8 +178,8 @@ export default {
 
       const cc=pane.querySelector('[data-act="copyCode"]');
       if(cc) cc.onclick=async()=>{ const g=await Group.get(repo,v.groupId); const code=buildJoinCode(g);
-        try{ await navigator.clipboard.writeText(code); window.alert('加入码已复制：'+code+'（10位数字）'); }
-        catch(e){ const c=openModal({title:'加入码（10位数字）',submitText:'关闭',bodyHTML:'<div data-el="cc" style="word-break:break-all;font-size:18px;letter-spacing:1px"></div>',onSubmit:()=>false}); c.body.querySelector('[data-el="cc"]').textContent=code; } };
+        try{ await navigator.clipboard.writeText(code); window.alert('加入码已复制：'+code+'（10位数字），发给组员在「加入小组」粘贴即可申请。'); }
+        catch(e){ const c=openModal({title:'加入码（复制给组员，10位数字）',submitText:'关闭',bodyHTML:'<div data-el="cc" style="word-break:break-all;font-size:18px;letter-spacing:1px"></div>',onSubmit:()=>false}); c.body.querySelector('[data-el="cc"]').textContent=code; } };
       const inv=pane.querySelector('[data-act="invite"]');
       if(inv) inv.onclick=async()=>{ const all=await Accounts.list(repo); const taken=new Set(members.map(m=>m.accountId)); const cands=all.filter(a=>!taken.has(a.id));
         const opts=cands.length?cands.map(a=>`<option value="${a.id}">${esc(a.name)}</option>`).join(''):'<option value="">暂无可邀请的本机账号</option>';
@@ -205,7 +205,7 @@ export default {
       const list=await Group.listNotifications(repo,v.groupId,state.currentAccountId);
       pane.innerHTML=`<div class="card"><strong>通知</strong><div style="margin-top:8px">
         ${list.length?list.map(n=>`<div class="member-row"><span style="flex:1;min-width:0">${n.read?'':'<span style="color:var(--danger)">●</span> '}${esc(n.title)}${n.body?` — ${esc(n.body)}`:''}</span>
-          ${n.read?'':'<button class="btn sm" data-read="'+n.id+'">已读</button>'}</div>`).join(''):'<div class="empty">暂无通知</div>'}</div></div>`;
+          ${n.read?'':'<button class="btn sm" data-read="'+n.id+'">标记已读</button>'}</div>`).join(''):'<div class="empty">暂无通知</div>'}</div></div>`;
       pane.querySelectorAll('[data-read]').forEach(b=>b.onclick=async()=>{ await Group.markNotificationRead(repo,b.dataset.read); refresh(); state.emit(); });
     }
 
@@ -213,7 +213,7 @@ export default {
       onSubmit:async(name)=>{ if(!String(name||'').trim()) return true;
         try{ const g=await Group.create(repo,name,state.currentAccountId); v.groupId=g.id; state.set({currentGroupId:g.id}); refresh(); }
         catch(e){ window.alert(e.message); return true; } return false; }});
-    el.querySelector('[data-act="joinGroup"]').onclick=()=>openPrompt({title:'加入小组',label:'粘贴 10 位数字加入码',submitText:'申请加入',cancelText:'取消',
+    el.querySelector('[data-act="joinGroup"]').onclick=()=>openPrompt({title:'加入小组',label:'粘贴 10 位数字加入码，或直接输入小组ID：',submitText:'申请加入',cancelText:'取消',
       onSubmit:async(input)=>{ let gid=parseJoinCode(input);
         if(gid){ const g=await findGroupByJoinCode(repo,gid); if(!g){ window.alert('加入码无效或已失效'); return true; } gid=g.id; }
         else gid=String(input||'').trim();

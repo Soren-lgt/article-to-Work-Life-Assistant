@@ -1,7 +1,7 @@
 // 工作生活助手 · 移动版 Service Worker
 // 仅在 http(s)/localhost 下由 main.js 注册；file:// 自动跳过。
 // 策略：首屏静态资源预缓存；其余同源 GET 采用缓存优先（cache-first），离线可打开，网络更新后回写缓存。
-const CACHE = 'worklife-mobile-v4';
+const CACHE = 'worklife-mobile-v5';
 const PRECACHE = [
   './',
   './index.html',
@@ -13,7 +13,8 @@ const PRECACHE = [
   './js/views/quiz.js',
   './js/views/devwork.js',
   './js/views/group.js',
-  './js/views/settings.js'
+  './js/lib/notifycenter.js',
+  './js/lib/push.js'
 ];
 
 self.addEventListener('install', (event) => {
@@ -27,6 +28,21 @@ self.addEventListener('activate', (event) => {
     caches.keys().then((keys) =>
       Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))
     ).then(() => self.clients.claim())
+  );
+});
+
+// 点通知栏里的通知：回到已打开的页面，没有就新开一个
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const target = (event.notification.data && event.notification.data.url) || './index.html';
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
+      for (const c of list) {
+        if ('focus' in c) return c.focus();
+      }
+      if (self.clients.openWindow) return self.clients.openWindow(target);
+      return null;
+    })
   );
 });
 

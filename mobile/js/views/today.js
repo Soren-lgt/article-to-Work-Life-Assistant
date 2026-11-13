@@ -2,6 +2,7 @@
 import { TodayPlan } from '../../../app/js/lib/todayplan.js';
 import { todayStr, monthStr } from '../../../app/js/lib/utils.js';
 import { openModal } from '../../../app/js/ui/modal.js';
+import { pushNotice } from '../lib/notifycenter.js';
 
 function pad(n){ return String(n).padStart(2,'0'); }
 function shiftDate(date, delta){
@@ -59,7 +60,9 @@ export default {
           if(!title){ window.alert('计划内容不能为空'); return true; }
           const priority=ctl.body.querySelector('[data-f="priority"]').value;
           const note=ctl.body.querySelector('[data-f="note"]').value.trim();
-          await TodayPlan.add(repo,accId,{title,date,priority,note}); await refresh(); return false;
+          await TodayPlan.add(repo,accId,{title,date,priority,note});
+          await pushNotice(repo,{accountId:accId,kind:'plan',title:'新增计划：'+title,body:`${date} · ${priority}${note?' · '+note:''}`});
+          state.emit(); await refresh(); return false;
         }});
     }
     function openEdit(task){
@@ -69,13 +72,17 @@ export default {
           if(!title){ window.alert('计划内容不能为空'); return true; }
           const priority=ctl.body.querySelector('[data-f="priority"]').value;
           const note=ctl.body.querySelector('[data-f="note"]').value.trim();
-          await TodayPlan.update(repo,task.id,{title,priority,note}); await refresh(); return false;
+          await TodayPlan.update(repo,task.id,{title,priority,note});
+          await pushNotice(repo,{accountId:state.currentAccountId,kind:'plan',title:'修改计划：'+title,body:`${task.date||date} · ${priority}`});
+          state.emit(); await refresh(); return false;
         }});
     }
     function openDelete(task){
       openModal({title:'删除计划',submitText:'删除',cancelText:'取消',
         bodyHTML:`<div>确认删除「${escapeHtml(task.title)}」？此操作不可撤销。</div>`,
-        onSubmit:async()=>{ await TodayPlan.remove(repo,task.id); await refresh(); return false; }});
+        onSubmit:async()=>{ await TodayPlan.remove(repo,task.id);
+          await pushNotice(repo,{accountId:state.currentAccountId,kind:'plan',title:'删除计划：'+task.title,body:task.date||date});
+          state.emit(); await refresh(); return false; }});
     }
 
     async function renderDay(){
@@ -125,7 +132,13 @@ export default {
       else if(act==='today'){ date=todayStr(); month=monthStr(); await refresh(); }
       else if(act==='add'){ openAdd(); }
       else if(act==='toggleView'){ view=view==='day'?'month':'day'; await refresh(); }
-      else if(op==='toggle'){ await TodayPlan.toggle(repo,id); await refresh(); }
+      else if(op==='toggle'){
+        const row=currentRows.find(x=>x.id===id);
+        await TodayPlan.toggle(repo,id);
+        if(row) await pushNotice(repo,{accountId:state.currentAccountId,kind:'plan',
+          title:(row.done?'取消完成计划：':'完成计划：')+row.title,body:date});
+        state.emit(); await refresh();
+      }
       else if(op==='del'){ const row=currentRows.find(x=>x.id===id); if(row) openDelete(row); }
       else if(op==='edit'){ const row=currentRows.find(x=>x.id===id); if(row) openEdit(row); }
     };

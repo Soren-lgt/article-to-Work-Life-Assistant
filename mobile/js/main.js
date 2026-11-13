@@ -6,7 +6,16 @@ import { todayStr } from '../../app/js/lib/utils.js';
 import { Accounts } from '../../app/js/lib/accounts.js';
 import { Group } from '../../app/js/lib/group.js';
 import { openModal, openConfirm, openPrompt } from '../../app/js/ui/modal.js';
-import { normalizeTheme } from '../../app/js/lib/theme.js';
+import { normalizeTheme, THEME_OPTIONS } from '../../app/js/lib/theme.js';
+import { Ledger } from '../../app/js/lib/ledger.js';
+import { ensureCardsReady } from './lib/ledgerinit.js';
+import { loadBackupForAccount } from './lib/importadapt.js';
+import { listNotices, unreadCount, markRead, markAllRead, kindLabel, formatNoticeTime } from './lib/notifycenter.js';
+import { permissionOf, permissionHint, requestPermission, setAppBadge, publishNotice } from './lib/push.js';
+import { Backup } from '../../app/js/lib/backup.js';
+import { showToast } from '../../app/js/ui/toast.js';
+import { MENU_ITEMS, accountMenuHTML, openAccountMenu, closeAccountMenu } from './accountmenu.js';
+import { openPasswordChange as openPasswordChangeModal } from './password.js';
 
 import home from './views/home.js';
 import today from './views/today.js';
@@ -14,13 +23,12 @@ import devwork from './views/devwork.js';
 import group from './views/group.js';
 import quiz from './views/quiz.js';
 import ledger from './views/ledger.js';
-import settings from './views/settings.js';
 
 // 移动版独立 IndexedDB 库名，与电脑版默认库 worklife 物理隔离；备份 JSON 格式一致可互导。
 const DB_NAME = 'worklife-mobile';
 const PREF_KEY = 'worklife-mobile.prefs';
 
-const MODULES = { home, today, devwork, group, quiz, ledger, settings };
+const MODULES = { home, today, devwork, group, quiz, ledger };
 
 function escapeHtml(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({
@@ -102,19 +110,81 @@ export async function refreshNotify() {
   const badge = document.getElementById('notifyBadge');
   if (!badge) return 0;
   const accId = AppState.currentAccountId;
-  let n = 0;
-  if (accId && App.repo) {
-    const groups = await Group.listForAccount(App.repo, accId);
-    for (const g of groups) {
-      const list = await Group.listNotifications(App.repo, g.id, accId);
-      n += list.filter((x) => !x.read).length;
-    }
-  }
+  const n = accId && App.repo ? await unreadCount(App.repo, accId) : 0;
   badge.textContent = String(n);
   badge.hidden = n <= 0;
+  setAppBadge(n);
   return n;
 }
 
+// 通知中心：铃铛里汇总计划 / 开发 / 同组的全部通知
+export async function openNotifyCenter() {
+  const accId = AppState.currentAccountId;
+  if (!accId) { showToast('请先登录账号'); return; }
+  let perm = permissionOf();
+  const ctl = openModal({ title: '通知', footer: false, bodyHTML: '<div data-el="notifyList"><div class="muted">加载中…</div></div>' });
+  const box = ctl.body.querySelector('[data-el="notifyList"]');
+
+  function permHTML() {
+    const hint = `<span class="muted" style="font-size:12px;flex:1;min-width:0">${escapeHtml(permissionHint(perm))}</span>`;
+    return `<div class="row" style="gap:8px;margin-bottom:10px;align-items:center">${hint}${
+      perm === 'granted' || perm === 'unsupported' ? '' : '<button class="btn sm primary" data-act="enablePush">开启手机通知</button>'}</div>`;
+  }
+
+  async function renderList() {
+    const rows = await listNotices(App.repo, accId);
+    const unread = rows.filter((n) => !n.read).length;
+    const head = permHTML();
+    if (!rows.length) {
+      box.innerHTML = `${head}<div class="empty">暂无通知。</div>`;
+      return;
+    }
+    box.innerHTML = `${head}
+      <div class="row between" style="margin-bottom:10px">
+        <span class="muted">共 ${rows.length} 条 · 未读 ${unread} 条</span>
+        <button class="btn sm" data-act="allread">全部已读</button>
+      </div>
+      ${rows.map((n) => `
+        <div class="list-item" data-act="read" data-id="${n.id}" style="cursor:pointer;${n.read ? 'opacity:.62' : ''}">
+          <div class="row between">
+            <span class="tag ${n.kind === 'dev' ? 'warn' : n.kind === 'group' ? 'ok' : ''}">${kindLabel(n)}</span>
+            <span class="muted" style="font-size:12px">${formatNoticeTime(n.createdAt)}</span>
+          </div>
+          <div style="margin-top:6px;font-weight:600;font-size:14px">${escapeHtml(n.title)}</div>
+          ${n.body ? `<div class="muted" style="font-size:12px;margin-top:2px">${escapeHtml(n.body)}</div>` : ''}
+        </div>`).join('')}`;
+  }
+
+  ctl.overlay.addEventListener('click', async (e) => {
+    const t = e.target.closest ? e.target.closest('[data-act]') : null;
+    const act = t ? t.dataset.act : null;
+    if (act === 'enablePush') {
+      perm = await requestPermission();
+      await renderList();
+      if (perm === 'granted') {
+        const welcome = {
+          id: 'notice_welcome_' + Date.now().toString(36),
+          title: '通知已开启',
+          body: '铃铛里的计划、开发、同组通知都会出现在手机通知栏',
+          createdAt: Date.now(),
+        };
+        // 刚授权的这一拍权限状态可能还没同步，失败就稍后重试一次
+        const sent = await publishNotice(welcome);
+        if (!sent) setTimeout(() => { publishNotice(welcome); }, 600);
+        showToast('已开启手机通知');
+      } else {
+        showToast(permissionHint(perm));
+      }
+    } else if (act === 'allread') {
+      await markAllRead(App.repo, accId);
+      await renderList(); await refreshNotify();
+    } else if (act === 'read') {
+      await markRead(App.repo, t.dataset.id);
+      await renderList(); await refreshNotify();
+    }
+  });
+  await renderList();
+}
 // ---------- 账号管理弹窗（逻辑对齐桌面 app.js，样式用移动端通用类） ----------
 function loginPanelHTML(accounts) {
   const opts = accounts.length
@@ -133,113 +203,265 @@ function registerPanelHTML() {
       <input data-f="pwd" type="password" autocomplete="new-password" placeholder="可选本地密码"></div>
     <button class="btn primary block" data-act="create">注册并创建</button>`;
 }
-function accountListHTML(accounts, currentId) {
-  if (!accounts.length) return '<div class="muted">还没有账号，先在上方创建一个。</div>';
-  return accounts.map((a) => {
-    const active = a.id === currentId;
-    return `<div class="member-row" style="flex-wrap:wrap">
-      <span style="flex:1;min-width:120px">${escapeHtml(a.name)}${active ? ' <span class="tag">当前</span>' : ''}${a.passwordHash ? ' <span class="muted">已设密</span>' : ''}</span>
-      <span class="row" style="gap:6px;flex-wrap:wrap">
-        ${active
-          ? '<button class="btn sm danger" data-act="logout">退出</button>'
-          : '<button class="btn sm" data-act="switch" data-id="' + a.id + '">登录</button>'}
-        <button class="btn sm" data-act="rename" data-id="${a.id}" data-name="${escapeHtml(a.name)}">改名</button>
-        <button class="btn sm" data-act="pwd" data-id="${a.id}">设密码</button>
-        <button class="btn sm danger" data-act="del" data-id="${a.id}" data-name="${escapeHtml(a.name)}">删除</button>
-      </span></div>`;
-  }).join('');
-}
-
+// ---------- 账号弹窗（对齐电脑版 app.js：只承担登录 / 注册，登录后的能力收敛到顶栏账号菜单） ----------
 async function openAccountManager() {
   const ctl = openModal({ title: '账号管理', footer: false,
     bodyHTML: `<div class="row" style="gap:8px;margin-bottom:10px">
       <button class="btn primary" data-act="tabLogin">登录</button>
       <button class="btn" data-act="tabRegister">注册</button></div>
       <div data-el="panel"></div>
-      <hr style="border:none;border-top:1px solid var(--line);margin:12px 0">
-      <div data-el="list"></div>` });
+      <div class="field-error" data-el="formError" role="alert" aria-live="polite" hidden></div>` });
   if (!ctl) return;
   let mode = 'login';
-  async function refresh() {
-    App.accounts = await Accounts.list(App.repo);
-    ctl.body.querySelector('[data-el="list"]').innerHTML = accountListHTML(App.accounts, AppState.currentAccountId);
+  function setFormError(msg) {
+    const el = ctl.body.querySelector('[data-el="formError"]');
+    if (!el) return;
+    el.textContent = String(msg == null ? '' : msg);
+    if (msg) el.removeAttribute('hidden'); else el.setAttribute('hidden', '');
   }
   function renderPanel() {
-    ctl.body.querySelector('[data-el="panel"]').innerHTML = mode === 'register' ? registerPanelHTML() : loginPanelHTML(App.accounts);
+    const panel = ctl.body.querySelector('[data-el="panel"]');
+    if (panel) panel.innerHTML = mode === 'register' ? registerPanelHTML() : loginPanelHTML(App.accounts);
     ctl.overlay.querySelectorAll('[data-act="tabLogin"],[data-act="tabRegister"]').forEach((b) => {
       b.classList.toggle('primary', b.dataset.act === (mode === 'register' ? 'tabRegister' : 'tabLogin'));
     });
   }
   ctl.overlay.addEventListener('click', async (e) => {
     const act = e.target.dataset && e.target.dataset.act;
-    const id = e.target.dataset && e.target.dataset.id;
     try {
       if (act === 'tabLogin') { mode = 'login'; renderPanel(); }
       else if (act === 'tabRegister') { mode = 'register'; renderPanel(); }
       else if (act === 'doLogin') {
+        App.accounts = await Accounts.list(App.repo);
         const sel = ctl.body.querySelector('[data-f="loginUser"]');
         const uid = sel && sel.value;
-        if (!uid) { window.alert('请选择要登录的账号'); return; }
+        if (!uid) { setFormError('请选择要登录的账号'); return; }
         const acc = App.accounts.find((a) => a.id === uid);
+        const pwdInput = ctl.body.querySelector('[data-f="loginPwd"]');
         if (acc && acc.passwordHash) {
-          const pwd = ctl.body.querySelector('[data-f="loginPwd"]').value;
-          if (!await Accounts.verify(App.repo, uid, pwd)) { window.alert('密码错误'); return; }
+          const pwd = pwdInput ? pwdInput.value : '';
+          if (!await Accounts.verify(App.repo, uid, pwd)) {
+            if (pwdInput) { pwdInput.value = ''; pwdInput.focus(); }
+            setFormError('密码错误，请重新输入');
+            return;
+          }
         }
+        setFormError('');
         AppState.set({ currentAccountId: uid, loggedOut: false });
-        await refreshAccounts(); await refresh();
+        await refreshAccounts();
+        ctl.close();
       } else if (act === 'create') {
         const name = ctl.body.querySelector('[data-f="name"]').value;
         const pwd = ctl.body.querySelector('[data-f="pwd"]').value;
-        await Accounts.create(App.repo, { name, password: pwd });
-        AppState.set({ loggedOut: false });
-        await refreshAccounts(); await refresh();
-        mode = 'login'; renderPanel();
-      } else if (act === 'switch') {
-        const acc = App.accounts.find((a) => a.id === id);
-        const finish = async () => {
-          AppState.set({ currentAccountId: id, loggedOut: false });
-          await refreshAccounts(); await refresh();
-        };
-        if (acc && acc.passwordHash) {
-          const sub = openModal({ title: '验证登录', submitText: '登录', cancelText: '取消',
-            bodyHTML: '<div class="field"><label>账号密码（密文输入）</label><input data-f="pwd" type="password" placeholder="请输入该账号本地密码"></div>',
-            onSubmit: async () => {
-              const p = sub.body.querySelector('[data-f="pwd"]').value;
-              if (!await Accounts.verify(App.repo, id, p)) { window.alert('密码错误'); return true; }
-              await finish(); return false;
-            } });
-        } else { await finish(); }
-      } else if (act === 'rename') {
-        openPrompt({ title: '改名', label: '新名称', placeholder: e.target.dataset.name || '', submitText: '保存',
-          onSubmit: async (n) => {
-            if (!String(n || '').trim()) return true;
-            await Accounts.rename(App.repo, id, n); await refreshAccounts(); await refresh(); return false;
-          } });
-      } else if (act === 'pwd') {
-        const sub = openModal({ title: '设置本地密码', submitText: '保存', cancelText: '取消',
-          bodyHTML: '<div class="field"><label>新密码（留空表示清除密码）</label><input data-f="pwd" type="password" autocomplete="new-password" placeholder="留空表示清除密码"></div>',
-          onSubmit: async () => {
-            await Accounts.setPassword(App.repo, id, sub.body.querySelector('[data-f="pwd"]').value);
-            await refreshAccounts(); await refresh(); return false;
-          } });
-      } else if (act === 'del') {
-        openConfirm({ title: '删除账号', confirmText: '删除',
-          message: '确认删除账号「' + e.target.dataset.name + '」？将同时清空其个人数据。',
-          onConfirm: async () => { await Accounts.remove(App.repo, id); await refreshAccounts(); await refresh(); } });
-      } else if (act === 'logout') {
-        AppState.set({ currentAccountId: null, loggedOut: true });
-        await refreshAccounts(); await refresh();
+        setFormError('');
+        const created = await Accounts.create(App.repo, { name, password: pwd });
+        AppState.set({ currentAccountId: (created && created.id) || AppState.currentAccountId, loggedOut: false });
+        await refreshAccounts();
+        ctl.close();
       }
-    } catch (err) { window.alert(err.message); }
+    } catch (err) { setFormError(err && err.message ? err.message : String(err)); }
   });
-  refresh(); renderPanel();
+  App.accounts = await Accounts.list(App.repo);
+  renderPanel();
+}
+
+// ---------- 顶栏账号菜单的 7 个动作（顺序与文案对齐电脑版 ui/accountmenu.js） ----------
+async function runMenuAction(act) {
+  try {
+    if (act === 'theme') return openGeneralSettings();
+    if (act === 'export') return exportData();
+    if (act === 'import') return openLoadData();
+    if (act === 'clear') return openClearData();
+    if (act === 'logout') return doLogout();
+    if (act === 'pwd') return openPasswordChange();
+    if (act === 'rename') return openRename();
+  } catch (err) { showToast('操作失败：' + ((err && err.message) || err)); }
+}
+
+// 导出数据：整库导出为 JSON 并下载（文件名与电脑版一致）
+async function exportData() {
+  const dump = await Backup.exportAll(App.repo);
+  const text = JSON.stringify(dump, null, 2);
+  const d = new Date();
+  const stamp = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
+  const filename = `worklife-backup-${stamp}.json`;
+  const blob = new Blob([text], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+  showToast('已导出数据');
+  return { filename, text };
+}
+
+// 加载数据：选文件后二选「合并加载 / 覆盖加载」
+function openLoadData() {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.json,application/json';
+  input.dataset.el = 'importFile';
+  input.style.display = 'none';
+  document.body.appendChild(input);
+  input.addEventListener('change', async () => {
+    const file = input.files && input.files[0];
+    input.remove();
+    if (!file) return;
+    let text;
+    try { text = await file.text(); } catch { showToast('读取文件失败'); return; }
+    const ctl = openModal({ title: '加载数据', footer: false,
+      bodyHTML: `<div class="muted" style="margin-bottom:12px">「覆盖加载」会先清空现有数据再写入；「合并加载」保留现有数据。</div>
+        <div class="row wrap" style="gap:8px"><button class="btn" data-act="merge">合并加载</button>
+        <button class="btn primary" data-act="replace">覆盖加载</button></div>` });
+    ctl.overlay.addEventListener('click', async (e) => {
+      const act = e.target.dataset && e.target.dataset.act;
+      if (act !== 'merge' && act !== 'replace') return;
+      ctl.close();
+      try {
+        const res = await loadBackupForAccount(App.repo, text, { mode: act === 'replace' ? 'replace' : 'merge', accountId: AppState.currentAccountId });
+        await refreshAccounts();
+        renderRoute();
+        showToast(`已加载数据，共 ${res.imported} 条记录`);
+      } catch (err) { showToast('加载失败：' + err.message); }
+    });
+  });
+  input.click();
+}
+
+// 清空数据：清空全部业务数据，账号保留
+function openClearData() {
+  return openConfirm({ title: '清空数据', confirmText: '清空',
+    message: '将清空今日计划、每日记账、开发工作、题库、同组计划的全部数据，账号保留。此操作不可撤销。',
+    onConfirm: async () => {
+      await Backup.clearBusinessData(App.repo);
+      await refreshAccounts();
+      renderRoute();
+      showToast('已清空数据');
+    } });
+}
+
+async function doLogout() {
+  AppState.set({ currentAccountId: null, loggedOut: true });
+  await refreshAccounts();
+  showToast('已退出登录');
+}
+
+// 修改密码：窗口与校验由 password.js 提供，账号菜单与设置入口共用同一份
+function openPasswordChange() {
+  return openPasswordChangeModal({ repo: App.repo, app: App, onDone: () => refreshAccounts() });
+}
+
+// 更改名字：作用于当前登录账号
+function openRename() {
+  const id = AppState.currentAccountId;
+  if (!id) { showToast('请先登录账号'); return; }
+  const acc = App.accounts.find((a) => a.id === id);
+  openPrompt({ title: '更改名字', label: '新名称', placeholder: acc ? acc.name : '', submitText: '保存',
+    onSubmit: async (value) => {
+      if (!String(value == null ? '' : value).trim()) return true;
+      await Accounts.rename(App.repo, id, value);
+      await refreshAccounts();
+      showToast('已更改名字');
+      return false;
+    } });
+}
+
+// 主题设置（对齐电脑版「通用设置」窗口）：主题 / 默认打开页 / 站内提醒 / 记账初始卡片管理
+function openGeneralSettings() {
+  const prefs = App.prefs || {};
+  const ctl = openModal({ title: '通用设置', footer: false,
+    bodyHTML: `
+      <div class="field"><label>主题</label><select data-f="theme"></select></div>
+      <div class="field"><label>默认打开页</label><select data-f="defaultRoute"></select></div>
+      <label class="option-row"><input type="checkbox" data-f="notify"><span>站内提醒（顶部铃铛显示未读）</span></label>
+      <div class="row between" style="margin:10px 0 6px">
+        <div class="muted">记账初始卡片管理</div>
+        <button class="btn sm" data-act="addInitCard">新增初始卡片</button>
+      </div>
+      <div data-el="ledgerCards"></div>` });
+  if (!ctl) return null;
+
+  const themeSel = ctl.body.querySelector('[data-f="theme"]');
+  const curTheme = normalizeTheme(prefs.theme);
+  THEME_OPTIONS.forEach(([val, txt]) => {
+    const o = document.createElement('option');
+    o.value = val; o.textContent = txt; if (curTheme === val) o.selected = true;
+    themeSel.appendChild(o);
+  });
+  themeSel.onchange = () => {
+    prefs.theme = themeSel.value;
+    if (typeof App.savePrefs === 'function') App.savePrefs(prefs);
+    document.documentElement.setAttribute('data-theme', normalizeTheme(prefs.theme));
+  };
+
+  const homeSel = ctl.body.querySelector('[data-f="defaultRoute"]');
+  [['home', '首页总览'], ['today', '今日计划'], ['devwork', '开发工作'], ['group', '同组计划'], ['quiz', '题库'], ['ledger', '每日记账']]
+    .forEach(([val, txt]) => {
+      const o = document.createElement('option');
+      o.value = val; o.textContent = txt; if ((prefs.defaultRoute || 'home') === val) o.selected = true;
+      homeSel.appendChild(o);
+    });
+  homeSel.onchange = () => { prefs.defaultRoute = homeSel.value; if (typeof App.savePrefs === 'function') App.savePrefs(prefs); };
+
+  const notifyChk = ctl.body.querySelector('[data-f="notify"]');
+  notifyChk.checked = prefs.notify !== false;
+  notifyChk.onchange = () => { prefs.notify = notifyChk.checked; if (typeof App.savePrefs === 'function') App.savePrefs(prefs); };
+
+  // 新增初始卡片：preset=true，每一天都会出现在记账页
+  const addInitBtn = ctl.body.querySelector('[data-act="addInitCard"]');
+  if (addInitBtn) addInitBtn.onclick = () => {
+    const accId = AppState.currentAccountId;
+    if (!accId) { showToast('请先登录账号'); return; }
+    openPrompt({ title: '新增初始卡片', label: '卡片名称', placeholder: '如：交通', submitText: '添加',
+      onSubmit: async (value) => {
+        const name = String(value == null ? '' : value).trim();
+        if (!name) return true;
+        try { await Ledger.addInitialCard(App.repo, accId, name); await refreshCards(); if (AppState.emit) AppState.emit(); } catch (e) { showToast(e.message); }
+        return false;
+      } });
+  };
+
+  const box = ctl.body.querySelector('[data-el="ledgerCards"]');
+  async function refreshCards() {
+    if (!box) return;
+    const accId = AppState.currentAccountId;
+    box.innerHTML = '';
+    if (!accId) { box.innerHTML = '<div class="muted">请先登录账号。</div>'; return; }
+    await ensureCardsReady(App.repo, accId);
+    const cards = (await Ledger.listCards(App.repo, accId)).filter((c) => c.preset === true);
+    if (!cards.length) { box.innerHTML = '<div class="empty">暂无初始卡片，点上方「新增初始卡片」添加。</div>'; return; }
+    cards.forEach((c) => {
+      const row = document.createElement('div');
+      row.className = 'member-row';
+      const label = document.createElement('span');
+      label.style.flex = '1'; label.textContent = c.name;
+      const rn = document.createElement('button');
+      rn.className = 'btn sm'; rn.textContent = '改名';
+      rn.onclick = () => openPrompt({ title: '改名', label: '新名称', placeholder: c.name, submitText: '保存',
+        onSubmit: async (n) => {
+          if (!String(n || '').trim()) return true;
+          try { await Ledger.renameCard(App.repo, c.id, n); await refreshCards(); if (AppState.emit) AppState.emit(); } catch (e) { showToast(e.message); }
+          return false;
+        } });
+      const rm = document.createElement('button');
+      rm.className = 'btn sm danger'; rm.textContent = '删除';
+      rm.onclick = () => openConfirm({ title: '删除卡片', confirmText: '删除', message: '删除该卡片会同时删除其记录，确定？',
+        onConfirm: async () => { await Ledger.removeCard(App.repo, c.id); await refreshCards(); if (AppState.emit) AppState.emit(); } });
+      row.append(label, rn, rm); box.appendChild(row);
+    });
+  }
+  refreshCards();
+  return ctl;
 }
 
 function bindTopbar() {
   const btn = document.getElementById('accountBtn');
-  if (btn) btn.addEventListener('click', openAccountManager);
+  if (btn) btn.addEventListener('click', () => {
+    if (AppState.currentAccountId) openAccountMenu({ app: App, anchor: btn, onAction: runMenuAction });
+    else openAccountManager();
+  });
   const bell = document.getElementById('notifyBell');
-  if (bell) bell.addEventListener('click', () => { location.hash = '#group'; });
+  if (bell) bell.addEventListener('click', () => { openNotifyCenter(); });
   document.querySelectorAll('#tabbar .tab').forEach((b) => {
     b.addEventListener('click', () => { location.hash = '#' + b.dataset.route; });
   });
@@ -275,4 +497,5 @@ async function boot() {
 }
 
 if (typeof window !== 'undefined' && typeof document !== 'undefined') boot();
-export { renderRoute, boot };
+export { renderRoute, boot, MENU_ITEMS, accountMenuHTML, closeAccountMenu };
+export { passwordChangeError, passwordChangeHTML, passwordChangeResetState } from './password.js';

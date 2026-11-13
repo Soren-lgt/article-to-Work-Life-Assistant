@@ -1,6 +1,7 @@
 // 开发工作（移动版）：开发任务 / Bug 记录 / 代码片段
 import { DevWork, TASK_STATUS, BUG_STATUS } from '../../../app/js/lib/devwork.js';
 import { openModal } from '../../../app/js/ui/modal.js';
+import { pushNotice } from '../lib/notifycenter.js';
 
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
@@ -84,6 +85,12 @@ export default {
           ${s.desc?'<div class="muted">'+esc(s.desc)+'</div>':''}
         </div>`).join('')}</div>`;
     }
+    async function notifyDev(title,body){
+      const accId=state.currentAccountId;
+      if(!accId) return;
+      await pushNotice(repo,{accountId:accId,kind:'dev',title,body:body||''});
+      state.emit();
+    }
     async function render(){
       el.querySelectorAll('[data-tab]').forEach(b=>b.classList.toggle('primary',b.dataset.tab===tab));
       if(tab==='task') await renderTasks(); else if(tab==='bug') await renderBugs(); else await renderSnippets();
@@ -95,8 +102,8 @@ export default {
         onSubmit:async()=>{ const g=k=>ctl.body.querySelector(`[data-f="${k}"]`).value;
           const title=g('title').trim(); if(!title){ window.alert('任务标题不能为空'); return true; }
           const projectName=g('projectName').trim();
-          if(prefill.id) await DevWork.updateTask(repo,prefill.id,{title,projectName});
-          else await DevWork.addTask(repo,state.currentAccountId,{title,projectName});
+          if(prefill.id){ await DevWork.updateTask(repo,prefill.id,{title,projectName}); await notifyDev('修改开发任务：'+title,projectName); }
+          else { await DevWork.addTask(repo,state.currentAccountId,{title,projectName}); await notifyDev('新建开发任务：'+title,projectName); }
           await render(); return false; }});
     }
     function openBug(prefill={}){
@@ -105,8 +112,8 @@ export default {
         onSubmit:async()=>{ const g=k=>ctl.body.querySelector(`[data-f="${k}"]`).value;
           const title=g('title').trim(); if(!title){ window.alert('Bug 标题不能为空'); return true; }
           const symptom=g('symptom').trim();
-          if(prefill.id) await DevWork.updateBug(repo,prefill.id,{title,symptom});
-          else await DevWork.addBug(repo,state.currentAccountId,{title,symptom});
+          if(prefill.id){ await DevWork.updateBug(repo,prefill.id,{title,symptom}); await notifyDev('修改 Bug：'+title,symptom); }
+          else { await DevWork.addBug(repo,state.currentAccountId,{title,symptom}); await notifyDev('记录 Bug：'+title,symptom); }
           await render(); return false; }});
     }
     function openSnippet(prefill={}){
@@ -115,15 +122,17 @@ export default {
         onSubmit:async()=>{ const g=k=>ctl.body.querySelector(`[data-f="${k}"]`).value;
           const title=g('title').trim(); if(!title){ window.alert('片段标题不能为空'); return true; }
           const payload={title,lang:g('lang').trim(),code:g('code'),desc:g('desc').trim()};
-          if(prefill.id) await DevWork.updateSnippet(repo,prefill.id,payload);
-          else await DevWork.addSnippet(repo,state.currentAccountId,payload);
+          if(prefill.id){ await DevWork.updateSnippet(repo,prefill.id,payload); await notifyDev('修改代码片段：'+title,payload.lang); }
+          else { await DevWork.addSnippet(repo,state.currentAccountId,payload); await notifyDev('新增代码片段：'+title,payload.lang); }
           await render(); return false; }});
     }
     function openRemove(kind,id,title){
       const label={task:'任务',bug:'Bug',snippet:'代码片段'}[kind];
       openModal({title:'删除'+label,submitText:'删除',cancelText:'取消',
         bodyHTML:`<div>确认删除该${label}「${esc(title)}」？此操作不可撤销。</div>`,
-        onSubmit:async()=>{ if(kind==='task') await DevWork.removeTask(repo,id); else if(kind==='bug') await DevWork.removeBug(repo,id); else await DevWork.removeSnippet(repo,id); await render(); return false; }});
+        onSubmit:async()=>{ if(kind==='task') await DevWork.removeTask(repo,id); else if(kind==='bug') await DevWork.removeBug(repo,id); else await DevWork.removeSnippet(repo,id);
+          await notifyDev('删除'+label+'：'+title,'');
+          await render(); return false; }});
     }
 
     if(el.__clickHandler) el.removeEventListener('click', el.__clickHandler);
@@ -146,8 +155,16 @@ export default {
     if(el.__changeHandler) el.removeEventListener('change', el.__changeHandler);
     const onChange=async(e)=>{
       const op=e.target.dataset.op;
-      if(op==='tstatus'){ await DevWork.setTaskStatus(repo,e.target.dataset.id,e.target.value); await render(); }
-      else if(op==='bstatus'){ await DevWork.setBugStatus(repo,e.target.dataset.id,e.target.value); await render(); }
+      if(op==='tstatus'){
+        const x=taskRows.find(r=>r.id===e.target.dataset.id);
+        await DevWork.setTaskStatus(repo,e.target.dataset.id,e.target.value);
+        await notifyDev('任务状态：'+e.target.value,(x?x.title:'')); await render();
+      }
+      else if(op==='bstatus'){
+        const x=bugRows.find(r=>r.id===e.target.dataset.id);
+        await DevWork.setBugStatus(repo,e.target.dataset.id,e.target.value);
+        await notifyDev('Bug 状态：'+e.target.value,(x?x.title:'')); await render();
+      }
     };
     el.addEventListener('change', onChange); el.__changeHandler=onChange;
     if(el.__unsub) el.__unsub();
