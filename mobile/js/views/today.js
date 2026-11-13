@@ -10,6 +10,11 @@ function shiftDate(date, delta){
   dt.setDate(dt.getDate()+delta);
   return `${dt.getFullYear()}-${pad(dt.getMonth()+1)}-${pad(dt.getDate())}`;
 }
+function shiftMonth(month, delta){
+  const parts=String(month||'').split('-'); const y=Number(parts[0]), m=Number(parts[1]);
+  const dt=new Date(y, (m||1)-1+delta, 1);
+  return `${dt.getFullYear()}-${pad(dt.getMonth()+1)}`;
+}
 function escapeHtml(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
 function taskFormHTML(prefill={}){
@@ -32,7 +37,7 @@ export default {
         <div class="row wrap" style="justify-content:space-between;gap:8px;margin-bottom:10px">
           <div class="row wrap">
             <button class="btn sm" data-act="prev">前一天</button>
-            <strong data-el="dateLabel"></strong>
+            <strong data-el="dateLabel" data-act="pickdate" style="cursor:pointer;border-bottom:1px dashed var(--line);padding:0 2px 2px"></strong>
             <button class="btn sm" data-act="next">后一天</button>
             <button class="btn sm" data-act="today"></button>
           </div>
@@ -49,7 +54,31 @@ export default {
     const dateLabel=q('[data-el="dateLabel"]'), countEl=q('[data-el="count"]');
     const dayView=q('[data-el="dayView"]'), monthView=q('[data-el="monthView"]');
     const listEl=q('[data-el="list"]'), todayBtn=q('[data-act="today"]'), viewBtn=q('[data-act="toggleView"]');
-    function syncTodayButton(){ todayBtn.textContent = date===todayStr()?'今天':'返回今天'; }
+    const prevBtn=q('[data-act="prev"]'), nextBtn=q('[data-act="next"]');
+    // 日期栏跟着视图换：按天是前一天/后一天，月度概览是前一个月/后一个月
+    function syncDateBar(){
+      if(view==='month'){
+        prevBtn.textContent='前一个月'; nextBtn.textContent='后一个月';
+        dateLabel.textContent=month;
+        todayBtn.textContent = month===monthStr()?'本月':'返回本月';
+      } else {
+        prevBtn.textContent='前一天'; nextBtn.textContent='后一天';
+        dateLabel.textContent=date;
+        todayBtn.textContent = date===todayStr()?'今天':'返回今天';
+      }
+    }
+
+    // 点中间的日期：自己挑一天跳过去（按天视图用日期，月度概览用月份）
+    function openPickDate(){
+      const ctl=openModal({title:'选择日期',submitText:'确认',cancelText:'取消',
+        bodyHTML:`<div class="field"><label>日期</label><input data-f="date" type="date" value="${view==='month'?month+'-01':date}"></div>`,
+        onSubmit:async()=>{
+          const v=String(ctl.body.querySelector('[data-f="date"]').value||'').trim();
+          if(!/^\d{4}-\d{2}-\d{2}$/.test(v)){ window.alert('请选择有效日期'); return true; }
+          if(view==='month'){ month=v.slice(0,7); await refresh(); return false; }
+          date=v; month=v.slice(0,7); await refresh(); return false;
+        }});
+    }
 
     function openAdd(){
       const accId=state.currentAccountId;
@@ -86,7 +115,7 @@ export default {
     }
 
     async function renderDay(){
-      dateLabel.textContent=date; syncTodayButton();
+      syncDateBar();
       const accId=state.currentAccountId;
       const rows = accId ? await TodayPlan.listByDate(repo,accId,date) : [];
       currentRows=rows;
@@ -108,7 +137,7 @@ export default {
     }
     async function renderMonth(){
       const accId=state.currentAccountId;
-      dateLabel.textContent=month+' 月度概览'; syncTodayButton();
+      syncDateBar();
       if(!accId){ monthView.innerHTML='<div class="muted">请先选择账号。</div>'; return; }
       const s=await TodayPlan.monthSummary(repo,accId,month);
       const days=Object.entries(s.byDay).sort((a,b)=>a[0].localeCompare(b[0]));
@@ -127,9 +156,22 @@ export default {
     if(el.__clickHandler) el.removeEventListener('click',el.__clickHandler);
     const onClick=async(e)=>{
       const act=e.target.dataset.act, op=e.target.dataset.op, id=e.target.dataset.id;
-      if(act==='prev'){ date=shiftDate(date,-1); month=date.slice(0,7); await refresh(); }
-      else if(act==='next'){ date=shiftDate(date,1); month=date.slice(0,7); await refresh(); }
-      else if(act==='today'){ date=todayStr(); month=monthStr(); await refresh(); }
+      if(act==='pickdate'){ openPickDate(); }
+      else if(act==='prev'){
+        if(view==='month'){ month=shiftMonth(month,-1); }
+        else { date=shiftDate(date,-1); month=date.slice(0,7); }
+        await refresh();
+      }
+      else if(act==='next'){
+        if(view==='month'){ month=shiftMonth(month,1); }
+        else { date=shiftDate(date,1); month=date.slice(0,7); }
+        await refresh();
+      }
+      else if(act==='today'){
+        if(view==='month'){ month=monthStr(); }
+        else { date=todayStr(); month=monthStr(); }
+        await refresh();
+      }
       else if(act==='add'){ openAdd(); }
       else if(act==='toggleView'){ view=view==='day'?'month':'day'; await refresh(); }
       else if(op==='toggle'){
