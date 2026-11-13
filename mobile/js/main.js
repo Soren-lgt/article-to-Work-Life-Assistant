@@ -141,7 +141,7 @@ export async function openNotifyCenter() {
     }
     box.innerHTML = `${head}
       <div class="row between" style="margin-bottom:10px">
-        <span class="muted">共 ${rows.length} 条 · 未读 ${unread} 条</span>
+        <span class="muted">共 ${rows.length} 条 · 未读 ${unread} 条<br><span style="font-size:11px">只显示未完成 / 进行中的内容</span></span>
         <button class="btn sm" data-act="allread">全部已读</button>
       </div>
       ${rows.map((n) => `

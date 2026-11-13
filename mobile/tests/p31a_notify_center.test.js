@@ -84,21 +84,20 @@ test('通知时间显示成 MM-DD HH:mm', () => {
   assert.equal(formatNoticeTime(0), '');
 });
 
-test('今日计划的新增 / 修改 / 删除 / 勾选都会记通知', () => {
-  assert.ok(today.includes("import { pushNotice } from '../lib/notifycenter.js';"));
-  assert.ok(today.includes("kind:'plan',title:'新增计划：'+title"));
-  assert.ok(today.includes("kind:'plan',title:'修改计划：'+title"));
-  assert.ok(today.includes("kind:'plan',title:'删除计划：'+task.title"));
-  assert.ok(today.includes("title:(row.done?'取消完成计划：':'完成计划：')+row.title"));
+test('今日计划的新增 / 修改 / 勾选（重新待办）会记通知', () => {
+  assert.ok(today.includes("import { pushNotice, pruneNotices } from '../lib/notifycenter.js';"));
+  assert.ok(today.includes("kind:'plan',refType:'plan',refId:rec&&rec.id"));
+  assert.ok(today.includes("title:'新增计划：'+title"));
+  assert.ok(today.includes("kind:'plan',refType:'plan',refId:task.id"));
+  assert.ok(today.includes("title:'修改计划：'+title"));
+  assert.ok(today.includes("title:'计划待完成：'+row.title"));
 });
 
-test('开发工作的新建 / 编辑 / 删除 / 状态变更都会记通知', () => {
-  assert.ok(devwork.includes("import { pushNotice } from '../lib/notifycenter.js';"));
+test('开发工作的新建 / 编辑 / 状态变更会记通知', () => {
+  assert.ok(devwork.includes("import { pushNotice, pruneNotices } from '../lib/notifycenter.js';"));
   assert.ok(devwork.includes("kind:'dev'"));
   assert.ok(devwork.includes("'新建开发任务：'+title"));
   assert.ok(devwork.includes("'记录 Bug：'+title"));
-  assert.ok(devwork.includes("'新增代码片段：'+title"));
-  assert.ok(devwork.includes("'删除'+label+'：'+title"));
   assert.ok(devwork.includes("'任务状态：'+e.target.value"));
   assert.ok(devwork.includes("'Bug 状态：'+e.target.value"));
 });

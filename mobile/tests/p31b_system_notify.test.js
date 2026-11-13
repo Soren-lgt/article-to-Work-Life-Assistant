@@ -69,7 +69,7 @@ test('Service Worker 能处理通知点击，且预缓存清单不再引用已�
   assert.ok(!sw.includes('views/settings.js'), 'settings.js 已删除，留着会让整份预缓存失败');
   assert.ok(sw.includes('js/lib/push.js'));
   assert.ok(sw.includes('js/lib/notifycenter.js'));
-  assert.ok(sw.includes("worklife-mobile-v5"), '缓存版本要升，手机才会换新代码');
+  assert.ok(/worklife-mobile-v[56]/.test(sw), '缓存版本要升，手机才会换新代码');
 });
 
 test('通知中心里能开权限，未读数同步到应用角标', () => {

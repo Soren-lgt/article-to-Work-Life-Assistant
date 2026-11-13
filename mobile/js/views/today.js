@@ -2,7 +2,7 @@
 import { TodayPlan } from '../../../app/js/lib/todayplan.js';
 import { todayStr, monthStr } from '../../../app/js/lib/utils.js';
 import { openModal } from '../../../app/js/ui/modal.js';
-import { pushNotice } from '../lib/notifycenter.js';
+import { pushNotice, pruneNotices } from '../lib/notifycenter.js';
 
 function pad(n){ return String(n).padStart(2,'0'); }
 function shiftDate(date, delta){
@@ -60,8 +60,8 @@ export default {
           if(!title){ window.alert('计划内容不能为空'); return true; }
           const priority=ctl.body.querySelector('[data-f="priority"]').value;
           const note=ctl.body.querySelector('[data-f="note"]').value.trim();
-          await TodayPlan.add(repo,accId,{title,date,priority,note});
-          await pushNotice(repo,{accountId:accId,kind:'plan',title:'新增计划：'+title,body:`${date} · ${priority}${note?' · '+note:''}`});
+          const rec=await TodayPlan.add(repo,accId,{title,date,priority,note});
+          await pushNotice(repo,{accountId:accId,kind:'plan',refType:'plan',refId:rec&&rec.id,title:'新增计划：'+title,body:`${date} · ${priority}${note?' · '+note:''}`});
           state.emit(); await refresh(); return false;
         }});
     }
@@ -73,7 +73,7 @@ export default {
           const priority=ctl.body.querySelector('[data-f="priority"]').value;
           const note=ctl.body.querySelector('[data-f="note"]').value.trim();
           await TodayPlan.update(repo,task.id,{title,priority,note});
-          await pushNotice(repo,{accountId:state.currentAccountId,kind:'plan',title:'修改计划：'+title,body:`${task.date||date} · ${priority}`});
+          await pushNotice(repo,{accountId:state.currentAccountId,kind:'plan',refType:'plan',refId:task.id,title:'修改计划：'+title,body:`${task.date||date} · ${priority}`});
           state.emit(); await refresh(); return false;
         }});
     }
@@ -81,7 +81,7 @@ export default {
       openModal({title:'删除计划',submitText:'删除',cancelText:'取消',
         bodyHTML:`<div>确认删除「${escapeHtml(task.title)}」？此操作不可撤销。</div>`,
         onSubmit:async()=>{ await TodayPlan.remove(repo,task.id);
-          await pushNotice(repo,{accountId:state.currentAccountId,kind:'plan',title:'删除计划：'+task.title,body:task.date||date});
+          await pruneNotices(repo,{refId:task.id,refType:'plan'});
           state.emit(); await refresh(); return false; }});
     }
 
@@ -135,8 +135,11 @@ export default {
       else if(op==='toggle'){
         const row=currentRows.find(x=>x.id===id);
         await TodayPlan.toggle(repo,id);
-        if(row) await pushNotice(repo,{accountId:state.currentAccountId,kind:'plan',
-          title:(row.done?'取消完成计划：':'完成计划：')+row.title,body:date});
+        if(row){
+          if(!row.done) await pruneNotices(repo,{refId:id,refType:'plan'});         // 刚勾成已完成 → 不再提醒
+          else await pushNotice(repo,{accountId:state.currentAccountId,kind:'plan',refType:'plan',refId:id,
+            title:'计划待完成：'+row.title,body:date});                             // 取消完成 → 回到待办提醒
+        }
         state.emit(); await refresh();
       }
       else if(op==='del'){ const row=currentRows.find(x=>x.id===id); if(row) openDelete(row); }

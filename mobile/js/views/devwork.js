@@ -1,7 +1,7 @@
 // 开发工作（移动版）：开发任务 / Bug 记录 / 代码片段
 import { DevWork, TASK_STATUS, BUG_STATUS } from '../../../app/js/lib/devwork.js';
 import { openModal } from '../../../app/js/ui/modal.js';
-import { pushNotice } from '../lib/notifycenter.js';
+import { pushNotice, pruneNotices } from '../lib/notifycenter.js';
 
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
@@ -85,10 +85,10 @@ export default {
           ${s.desc?'<div class="muted">'+esc(s.desc)+'</div>':''}
         </div>`).join('')}</div>`;
     }
-    async function notifyDev(title,body){
+    async function notifyDev(title,body,refType,refId){
       const accId=state.currentAccountId;
       if(!accId) return;
-      await pushNotice(repo,{accountId:accId,kind:'dev',title,body:body||''});
+      await pushNotice(repo,{accountId:accId,kind:'dev',title,body:body||'',refType:refType||null,refId:refId||null});
       state.emit();
     }
     async function render(){
@@ -102,8 +102,8 @@ export default {
         onSubmit:async()=>{ const g=k=>ctl.body.querySelector(`[data-f="${k}"]`).value;
           const title=g('title').trim(); if(!title){ window.alert('任务标题不能为空'); return true; }
           const projectName=g('projectName').trim();
-          if(prefill.id){ await DevWork.updateTask(repo,prefill.id,{title,projectName}); await notifyDev('修改开发任务：'+title,projectName); }
-          else { await DevWork.addTask(repo,state.currentAccountId,{title,projectName}); await notifyDev('新建开发任务：'+title,projectName); }
+          if(prefill.id){ await DevWork.updateTask(repo,prefill.id,{title,projectName}); await notifyDev('修改开发任务：'+title,projectName,'task',prefill.id); }
+          else { const rec=await DevWork.addTask(repo,state.currentAccountId,{title,projectName}); await notifyDev('新建开发任务：'+title,projectName,'task',rec&&rec.id); }
           await render(); return false; }});
     }
     function openBug(prefill={}){
@@ -112,8 +112,8 @@ export default {
         onSubmit:async()=>{ const g=k=>ctl.body.querySelector(`[data-f="${k}"]`).value;
           const title=g('title').trim(); if(!title){ window.alert('Bug 标题不能为空'); return true; }
           const symptom=g('symptom').trim();
-          if(prefill.id){ await DevWork.updateBug(repo,prefill.id,{title,symptom}); await notifyDev('修改 Bug：'+title,symptom); }
-          else { await DevWork.addBug(repo,state.currentAccountId,{title,symptom}); await notifyDev('记录 Bug：'+title,symptom); }
+          if(prefill.id){ await DevWork.updateBug(repo,prefill.id,{title,symptom}); await notifyDev('修改 Bug：'+title,symptom,'bug',prefill.id); }
+          else { const rec=await DevWork.addBug(repo,state.currentAccountId,{title,symptom}); await notifyDev('记录 Bug：'+title,symptom,'bug',rec&&rec.id); }
           await render(); return false; }});
     }
     function openSnippet(prefill={}){
@@ -122,8 +122,8 @@ export default {
         onSubmit:async()=>{ const g=k=>ctl.body.querySelector(`[data-f="${k}"]`).value;
           const title=g('title').trim(); if(!title){ window.alert('片段标题不能为空'); return true; }
           const payload={title,lang:g('lang').trim(),code:g('code'),desc:g('desc').trim()};
-          if(prefill.id){ await DevWork.updateSnippet(repo,prefill.id,payload); await notifyDev('修改代码片段：'+title,payload.lang); }
-          else { await DevWork.addSnippet(repo,state.currentAccountId,payload); await notifyDev('新增代码片段：'+title,payload.lang); }
+          if(prefill.id) await DevWork.updateSnippet(repo,prefill.id,payload);
+          else await DevWork.addSnippet(repo,state.currentAccountId,payload);
           await render(); return false; }});
     }
     function openRemove(kind,id,title){
@@ -131,7 +131,7 @@ export default {
       openModal({title:'删除'+label,submitText:'删除',cancelText:'取消',
         bodyHTML:`<div>确认删除该${label}「${esc(title)}」？此操作不可撤销。</div>`,
         onSubmit:async()=>{ if(kind==='task') await DevWork.removeTask(repo,id); else if(kind==='bug') await DevWork.removeBug(repo,id); else await DevWork.removeSnippet(repo,id);
-          await notifyDev('删除'+label+'：'+title,'');
+          if(kind!=='snippet'){ await pruneNotices(repo,{refId:id,refType:kind}); state.emit(); }
           await render(); return false; }});
     }
 
@@ -158,12 +158,16 @@ export default {
       if(op==='tstatus'){
         const x=taskRows.find(r=>r.id===e.target.dataset.id);
         await DevWork.setTaskStatus(repo,e.target.dataset.id,e.target.value);
-        await notifyDev('任务状态：'+e.target.value,(x?x.title:'')); await render();
+        if(e.target.value==='已完成'){ await pruneNotices(repo,{refId:e.target.dataset.id,refType:'task'}); state.emit(); }
+        else await notifyDev('任务状态：'+e.target.value,(x?x.title:''),'task',e.target.dataset.id);
+        await render();
       }
       else if(op==='bstatus'){
         const x=bugRows.find(r=>r.id===e.target.dataset.id);
         await DevWork.setBugStatus(repo,e.target.dataset.id,e.target.value);
-        await notifyDev('Bug 状态：'+e.target.value,(x?x.title:'')); await render();
+        if(e.target.value==='已修复'||e.target.value==='已关闭'){ await pruneNotices(repo,{refId:e.target.dataset.id,refType:'bug'}); state.emit(); }
+        else await notifyDev('Bug 状态：'+e.target.value,(x?x.title:''),'bug',e.target.dataset.id);
+        await render();
       }
     };
     el.addEventListener('change', onChange); el.__changeHandler=onChange;
