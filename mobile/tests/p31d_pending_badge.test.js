@@ -4,12 +4,13 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { pendingCount, unreadCount, listNotices, markRead, markAllRead } from '../js/lib/notifycenter.js';
+import { pendingCount, unreadCount, listNotices, markRead } from '../js/lib/notifycenter.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..', '..');
 const mainSrc = readFileSync(join(root, 'mobile/js/main.js'), 'utf8');
 const swSrc = readFileSync(join(root, 'mobile/sw.js'), 'utf8');
+const notifySrc = readFileSync(join(root, 'mobile/js/lib/notifycenter.js'), 'utf8');
 const ACC = 'accounts_x';
 
 function multiRepo(seed = {}) {
@@ -47,8 +48,10 @@ test('数字只跟待办份数走：点开过（已读）也算，做完才减�
   repo.stores.notification.push({ id: 'n3', accountId: ACC, toAccountId: ACC, kind: 'plan', refType: 'plan', refId: 'p1', title: '修改计划：A', read: true, createdAt: 3 });
   assert.equal(await pendingCount(repo, ACC), 2, '同一个待办多条也只算一份');
 
-  // 全部标已读也不掉数字
-  await markAllRead(repo, ACC);
+  // 全标已读也不掉数字
+  await markRead(repo, 'n1');
+  await markRead(repo, 'n2');
+  await markRead(repo, 'n3');
   assert.equal(await pendingCount(repo, ACC), 2, '标已读不减少数字');
 
   // 做完一个才 -1
@@ -62,7 +65,7 @@ test('通知弹窗里没有"全部已读"，点条目也不再标已读', () => 
   assert.equal(mainSrc.includes('data-act="allread"'), false, '去掉全部已读按钮');
   assert.equal(mainSrc.includes('全部已读'), false);
   assert.equal(mainSrc.includes('data-act="read"'), false, '条目不再当已读按钮点');
-  assert.equal(mainSrc.includes('markAllRead'), false);
+  assert.equal(notifySrc.includes('markAllRead'), false, '连函数都不再有');
   assert.ok(mainSrc.includes('if (!n.refType && !n.read) await markRead(App.repo, n.id)'), '同组消息看过就收掉，任务类的不动');
 });
 

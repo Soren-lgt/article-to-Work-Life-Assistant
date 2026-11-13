@@ -107,18 +107,6 @@ export async function markRead(repo, id) {
   return true;
 }
 
-// 全部已读：把当前铃铛里看得到的那些（合并后的每一条）标为已读
-export async function markAllRead(repo, accountId) {
-  const rows = await listNotices(repo, accountId);
-  let changed = 0;
-  for (const n of rows) {
-    if (n.read) continue;
-    await repo.put('notification', { ...n, read: true });
-    changed++;
-  }
-  return changed;
-}
-
 // 对象完成或删除后，把它相关的通知收掉（标为已读，历史仍留档，但不再提醒）
 export async function pruneNotices(repo, { refId, refType = null } = {}) {
   if (!repo || !refId) return 0;

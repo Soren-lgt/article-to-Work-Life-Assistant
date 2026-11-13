@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  pushNotice, listNotices, unreadCount, markRead, markAllRead, kindOf, kindLabel, formatNoticeTime,
+  pushNotice, listNotices, unreadCount, markRead, kindOf, kindLabel, formatNoticeTime,
 } from '../js/lib/notifycenter.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -64,7 +64,7 @@ test('同一账号的通知全都在列表里（含同组通知），按时间�
   assert.equal(kindLabel(list[2]), '计划');
 });
 
-test('未读数只算未读；单条已读与全部已读都能生效', async () => {
+test('未读数只算未读；单条已读能生效', async () => {
   const repo = memoryRepo([
     { id: 'a', kind: 'plan', accountId: ACC, toAccountId: ACC, title: 'A', body: '', read: false, createdAt: 1 },
     { id: 'b', kind: 'dev', accountId: ACC, toAccountId: ACC, title: 'B', body: '', read: false, createdAt: 2 },
@@ -73,7 +73,7 @@ test('未读数只算未读；单条已读与全部已读都能生效', async ()
   assert.equal(await unreadCount(repo, ACC), 2);
   assert.equal(await markRead(repo, 'a'), true);
   assert.equal(await unreadCount(repo, ACC), 1);
-  assert.equal(await markAllRead(repo, ACC), 1);
+  await markRead(repo, 'b');
   assert.equal(await unreadCount(repo, ACC), 0);
   assert.equal(await markRead(repo, 'nope'), false);
 });

@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  pushNotice, listNotices, unreadCount, isPending, pruneNotices, markAllRead,
+  pushNotice, listNotices, unreadCount, isPending, pruneNotices,
 } from '../js/lib/notifycenter.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -107,7 +107,7 @@ test('对象完成后 pruneNotices 把它的通知收掉（历史留档、不再
   const rows = repo.stores.notification;
   assert.equal(rows.find((r) => r.id === 'n1').read, true);
   assert.equal(rows.find((r) => r.id === 'n3').read, false);
-  assert.equal(await markAllRead(repo, ACC), 1, '剩下的未读只有别的计划那条');
+  assert.equal(await unreadCount(repo, ACC), 1, '剩下的未读只有别的计划那条');
 });
 
 test('计划：勾成完成就收通知，取消完成才重新提醒', () => {
