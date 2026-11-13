@@ -10,7 +10,7 @@ import { normalizeTheme, THEME_OPTIONS } from '../../app/js/lib/theme.js';
 import { Ledger } from '../../app/js/lib/ledger.js';
 import { ensureCardsReady } from './lib/ledgerinit.js';
 import { loadBackupForAccount } from './lib/importadapt.js';
-import { listNotices, unreadCount, markRead, markAllRead, kindLabel, formatNoticeTime } from './lib/notifycenter.js';
+import { listNotices, pendingCount, markRead, kindLabel, formatNoticeTime } from './lib/notifycenter.js';
 import { permissionOf, permissionHint, requestPermission, setAppBadge, publishNotice } from './lib/push.js';
 import { Backup } from '../../app/js/lib/backup.js';
 import { showToast } from '../../app/js/ui/toast.js';
@@ -110,7 +110,7 @@ export async function refreshNotify() {
   const badge = document.getElementById('notifyBadge');
   if (!badge) return 0;
   const accId = AppState.currentAccountId;
-  const n = accId && App.repo ? await unreadCount(App.repo, accId) : 0;
+  const n = accId && App.repo ? await pendingCount(App.repo, accId) : 0;
   badge.textContent = String(n);
   badge.hidden = n <= 0;
   setAppBadge(n);
@@ -133,7 +133,7 @@ export async function openNotifyCenter() {
 
   async function renderList() {
     const rows = await listNotices(App.repo, accId);
-    const unread = rows.filter((n) => !n.read).length;
+    const todo = rows.filter((n) => n.refType && n.refId).length;
     const head = permHTML();
     if (!rows.length) {
       box.innerHTML = `${head}<div class="empty">暂无通知。</div>`;
@@ -141,11 +141,10 @@ export async function openNotifyCenter() {
     }
     box.innerHTML = `${head}
       <div class="row between" style="margin-bottom:10px">
-        <span class="muted">共 ${rows.length} 条 · 未读 ${unread} 条<br><span style="font-size:11px">只显示未完成 / 进行中的内容</span></span>
-        <button class="btn sm" data-act="allread">全部已读</button>
+        <span class="muted">共 ${todo} 条待办<br><span style="font-size:11px">只显示未完成 / 进行中的内容，做完就自动消失</span></span>
       </div>
       ${rows.map((n) => `
-        <div class="list-item" data-act="read" data-id="${n.id}" style="cursor:pointer;${n.read ? 'opacity:.62' : ''}">
+        <div class="list-item" data-id="${n.id}">
           <div class="row between">
             <span class="tag ${n.kind === 'dev' ? 'warn' : n.kind === 'group' ? 'ok' : ''}">${kindLabel(n)}</span>
             <span class="muted" style="font-size:12px">${formatNoticeTime(n.createdAt)}</span>
@@ -175,15 +174,13 @@ export async function openNotifyCenter() {
       } else {
         showToast(permissionHint(perm));
       }
-    } else if (act === 'allread') {
-      await markAllRead(App.repo, accId);
-      await renderList(); await refreshNotify();
-    } else if (act === 'read') {
-      await markRead(App.repo, t.dataset.id);
-      await renderList(); await refreshNotify();
     }
   });
   await renderList();
+  // 同组消息看过就算处理完（不影响计划/任务/Bug，它们的消失只跟完成有关）
+  for (const n of await listNotices(App.repo, accId)) {
+    if (!n.refType && !n.read) await markRead(App.repo, n.id);
+  }
 }
 // ---------- 账号管理弹窗（逻辑对齐桌面 app.js，样式用移动端通用类） ----------
 function loginPanelHTML(accounts) {

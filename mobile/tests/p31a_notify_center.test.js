@@ -102,11 +102,11 @@ test('开发工作的新建 / 编辑 / 状态变更会记通知', () => {
   assert.ok(devwork.includes("'Bug 状态：'+e.target.value"));
 });
 
-test('铃铛未读数按整账号统计，点开是通知中心（不再直接跳同组页）', () => {
-  assert.ok(mainSrc.includes('await unreadCount(App.repo, accId)'));
+test('铃铛角标按整账号的待办份数统计，点开是通知中心（不再直接跳同组页）', () => {
+  assert.ok(mainSrc.includes('await pendingCount(App.repo, accId)'));
   assert.ok(!mainSrc.includes('Group.listNotifications(App.repo, g.id, accId)'));
   assert.ok(mainSrc.includes('openNotifyCenter();'), '铃铛应打开通知中心');
   assert.ok(!mainSrc.includes("location.hash = '#group';"), '铃铛不应再直接跳同组页');
   assert.ok(mainSrc.includes("title: '通知'"));
-  assert.ok(mainSrc.includes('data-act="allread"'));
+  assert.equal(mainSrc.includes('data-act="allread"'), false, 'P31-d 去掉了全部已读');
 });

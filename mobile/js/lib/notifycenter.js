@@ -47,7 +47,7 @@ export async function pushNotice(repo, { accountId, title, body = '', kind = 'pl
 export async function isPending(repo, notice) {
   const type = notice && notice.refType;
   const id = notice && notice.refId;
-  if (!type || !id) return true; // 同组消息等没有关联对象，照常提醒
+  if (!type || !id) return !notice.read; // 同组消息没有完成状态：没看过就提示一下，看过就不再占位
   if (type === 'plan') {
     const it = await repo.get('todoplan', id);
     return !!(it && !it.done);
@@ -86,6 +86,13 @@ export async function listNotices(repo, accountId, opts) {
   }
   return plain.concat(Array.from(byRef.values()))
     .sort((a, b) => (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0));
+}
+
+// 铃铛上的红色数字：待办份数（跟"有没有点开过"无关，只有做完一件事才减一）
+export async function pendingCount(repo, accountId) {
+  const rows = await listNotices(repo, accountId);
+  // 只数"要做的事"（计划 / 任务 / Bug）；同组消息进列表但不占数字
+  return rows.filter((n) => n.refType && n.refId).length;
 }
 
 export async function unreadCount(repo, accountId) {
