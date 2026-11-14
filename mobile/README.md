@@ -37,6 +37,20 @@ python serve-mobile.py
 - iOS Safari：打开页面 → 分享 →「添加到主屏幕」；iOS 安装与离线能力通常要求页面经 https 访问。
 - 安装前提：页面需经 `http://localhost` 或 `https://` 访问；`file://` 无法注册 Service Worker。
 
+### 方式三：装成安卓 App（不想每次都开浏览器就用这个）
+
+仓库里带了现成的安装包 `mobile/android/chaomu-1.0.1.apk`（约 100 KB，minSdk 21 / targetSdk 34，只申请联网权限）：
+
+```
+https://github.com/Soren-lgt/article-to-Work-Life-Assistant/raw/main/mobile/android/chaomu-1.0.1.apk
+```
+
+- 安装：手机浏览器打开上面的直链下载，点安装；首次会问「允许安装未知来源应用」，允许即可。装完桌面图标下方显示「朝暮」。
+- 升级：新版沿用同一包名 `com.worklife.assistant` 与同一签名证书，可以直接覆盖安装，不用先卸载。
+- 数据：App 里用的是它自己 WebView 的本地存储，**和手机浏览器不是同一份**。两边都登录同一账号后，用账号菜单「导出数据 / 加载数据」走 JSON 备份即可搬过去。
+- 打不开时：点开图标会先显示「正在打开…」，连不上会直接写明原因，点一下屏幕就重试——正常情况下不会再停在白屏上。
+- 自己重打包：见 `android/README.md`，需要 JDK 17 + Android SDK 34，`python build_apk.py` 一条命令跑完编译、签名、对齐。
+
 ## 数据存储与迁移
 
 - 移动版使用独立 IndexedDB 库名 `worklife-mobile`，与电脑版默认库 `worklife` **物理隔离**，互不污染。
