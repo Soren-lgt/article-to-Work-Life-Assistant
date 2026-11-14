@@ -60,6 +60,11 @@ input,textarea,select{ font:inherit; color:var(--fg); }
   width:100%; min-height:44px; padding:10px 12px; border:1px solid var(--line);
   border-radius:11px; background:var(--card); }
 .field textarea{ min-height:84px; resize:vertical; }
+
+/* 弹窗里的纯输入框（更改名字 / 卡片改名这类）：输入的内容固定黑色，夜间主题下也看得清 */
+.modal-body input[data-f="v"]{
+  width:100%; min-height:44px; padding:10px 12px; border:1px solid var(--line);
+  border-radius:11px; background:#fff; color:#000; -webkit-text-fill-color:#000; }
 .field .hint{ font-size:12px; color:var(--muted); margin-top:4px; }
 
 /* 首页网格 */
