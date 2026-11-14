@@ -52,6 +52,19 @@ input,textarea,select{ font:inherit; color:var(--fg); }
 .btn.danger{ color:var(--danger); border-color:var(--danger); background:transparent; }
 .btn.block{ width:100%; }
 .btn.sm{ min-height:34px; padding:4px 10px; font-size:13px; border-radius:9px; }
+/* 日期导航（今日计划 / 每日记账）：前一天 · 日期 · 后一天 · 今天 固定在同一行。
+   按钮文字会变成「返回今天」「返回本月」这类四字文案，这里不让它被挤到第二行：
+   整行 nowrap、按钮横向内边距收紧，极窄屏兜底为可横滑（不显示滚动条）。 */
+.daynav{ display:flex; flex-wrap:nowrap; align-items:center; gap:6px;
+  min-width:0; overflow-x:auto; scrollbar-width:none; -ms-overflow-style:none; }
+.daynav::-webkit-scrollbar{ display:none; }
+.daynav > .btn{ flex:0 0 auto; padding:4px 8px; }
+.daynav > strong{ flex:0 1 auto; min-width:0; white-space:nowrap; }
+@media (max-width: 360px){
+  /* 320/360 这类窄屏：再把按钮收紧一档，四字文案（返回本月）也不会横向溢出 */
+  .daynav{ gap:5px; }
+  .daynav > .btn{ padding:4px 6px; font-size:12.5px; }
+}
 
 /* 表单 */
 .field{ margin-bottom:12px; }

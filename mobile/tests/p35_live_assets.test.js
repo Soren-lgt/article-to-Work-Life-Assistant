@@ -52,7 +52,8 @@ test('main.js 依赖的 app 侧文件都在仓库里（线上 404 曾让整页�
 
 test('SW 缓存版本已升到 v13，手机才会丢掉旧脚本', () => {
   const sw = readFileSync(join(root, 'mobile', 'sw.js'), 'utf8');
-  assert.ok(sw.includes("'worklife-mobile-v13'"), '缓存名已升版');
+  const ver = sw.match(/worklife-mobile-v(\d+)/);
+  assert.ok(ver && Number(ver[1]) >= 13, '缓存名已升版');
   assert.equal(sw.includes("'worklife-mobile-v12'"), false, '旧版本号不再出现');
 });
 

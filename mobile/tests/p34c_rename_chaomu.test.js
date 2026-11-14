@@ -45,7 +45,8 @@ test('本地数据标识不动，升级后原有记录还在', () => {
 });
 
 test('Service Worker 缓存升版，手机上才会换成新图标与新名字', () => {
-  assert.ok(/worklife-mobile-v13/.test(sw), '缓存版本 v13');
+  const ver = sw.match(/worklife-mobile-v(\d+)/);
+  assert.ok(ver && Number(ver[1]) >= 13, '缓存版本已升版');
   assert.ok(sw.includes('朝暮'), '注释同步');
 });
 

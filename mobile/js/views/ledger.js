@@ -22,7 +22,7 @@ export default {
     el.innerHTML=`
       <div class="card">
         <div class="row wrap" style="justify-content:space-between;gap:8px">
-          <div class="row wrap">
+          <div class="row daynav">
             <button class="btn sm" data-act="prev">前一天</button>
             <strong data-el="dateLabel" data-act="pickdate" style="cursor:pointer;border-bottom:1px dashed var(--line);padding:0 2px 2px"></strong>
             <button class="btn sm" data-act="next">后一天</button>
