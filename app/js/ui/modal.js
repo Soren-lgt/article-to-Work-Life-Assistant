@@ -2,7 +2,7 @@
 // 通用模态框：可靠打开与关闭。关闭即从 DOM 移除并解绑，避免多次打开后残留、点不掉。
 // onSubmit(close)：提交回调；返回真值表示由回调自行控制关闭，否则提交后自动关闭。
 
-// 纯函数：仅当点击落在遮罩层本身（而非弹窗内容）时才允许关闭
+// 纯函数：判断点击是否落在遮罩本体（保留给需要命中判断的调用方）
 export function isOverlayClick(overlay, target) {
   return Boolean(overlay) && target === overlay;
 }
@@ -12,9 +12,11 @@ export function openModal(options = {}) {
   if (!doc) return null;
   const {
     title = "",
+    boxClass = "",
     bodyHTML = "",
     submitText = "确定",
     cancelText = "取消",
+    footExtra = "",
     footer = true,
     onSubmit = null,
     onClose = null,
@@ -24,7 +26,7 @@ export function openModal(options = {}) {
   const overlay = doc.createElement("div");
   overlay.className = "modal-overlay";
   overlay.innerHTML = `
-    <div class="modal-box" role="dialog" aria-modal="true">
+    <div class="modal-box${boxClass ? " " + boxClass : ""}" role="dialog" aria-modal="true">
       <div class="modal-head">
         <strong>${title}</strong>
         <button type="button" class="modal-x" data-m-close aria-label="关闭">&times;</button>
@@ -32,6 +34,7 @@ export function openModal(options = {}) {
       <div class="modal-body">${bodyHTML}</div>
       ${footer ? `<div class="modal-foot">
         <button type="button" class="btn" data-m-cancel>${cancelText}</button>
+        ${footExtra}
         <button type="button" class="btn primary" data-m-submit>${submitText}</button>
       </div>` : ""}
     </div>`;
@@ -48,9 +51,7 @@ export function openModal(options = {}) {
   }
 
   const q = (sel) => overlay.querySelector(sel);
-  const onMaskClose = (e) => { if (isOverlayClick(overlay, e.target)) close(); };
-  overlay.addEventListener("mousedown", onMaskClose);
-  overlay.addEventListener("click", onMaskClose);
+  // P26-3：点弹窗外的遮罩不再关闭弹窗（误触不该丢掉正在填的内容），关闭只走 × 与取消
   if (typeof onDocument === "function") overlay.addEventListener("click", (e) => onDocument(e));
   const cancelBtn = q("[data-m-cancel]");
   const closeBtn = q("[data-m-close]");

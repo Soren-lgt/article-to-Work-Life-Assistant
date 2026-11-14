@@ -39,7 +39,7 @@ export class MemoryAdapter {
 
 // ---------- IndexedDB 适配器（仅浏览器环境）----------
 export class IdbAdapter {
-  constructor(dbName = 'worklife', version = 1) {
+  constructor(dbName = 'worklife', version = 4) {
     this.dbName = dbName;
     this.version = version;
     this.db = null;

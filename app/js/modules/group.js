@@ -53,7 +53,7 @@ export default {
 
     async function refresh() {
       const accId = state.currentAccountId;
-      if (!accId) { groupsBar.innerHTML = ''; body.innerHTML = '<div class="card muted">请先在设置中创建账号。</div>'; return; }
+      if (!accId) { groupsBar.innerHTML = ''; body.innerHTML = '<div class="card muted">请先在右上角登录账号。</div>'; return; }
       const groups = await Group.listForAccount(repo, accId);
       if (v.groupId && !groups.some((g) => g.id === v.groupId)) v.groupId = null;
       if (!v.groupId && groups.length) v.groupId = groups[0].id;

@@ -19,12 +19,16 @@ export const Backup = {
     return out;
   },
 
+  // 题库数据文件里账号写占位符，加载时归到当前账号
+  IMPORT_ACCOUNT: '__IMPORT__',
+  ACCOUNT_SCOPED_STORES: ['bank', 'question', 'attempt'],
+
   // 导入：mode='replace' 先清空对应仓库再写入；'merge' 直接写入（同 id 覆盖）
-  async importAll(repo, data, { mode = 'replace' } = {}) {
+  async importAll(repo, data, { mode = 'replace', accountId = null } = {}) {
     if (!data || typeof data !== 'object' || !data.stores || typeof data.stores !== 'object') {
       throw new Error('备份数据格式无效');
     }
-    return this._writeStores(repo, data.stores, mode);
+    return this._writeStores(repo, data.stores, mode, accountId);
   },
 
   // 从 JSON 字符串导入
@@ -34,7 +38,7 @@ export const Backup = {
     return this.importAll(repo, parsed, opts);
   },
 
-  async _writeStores(repo, stores, mode) {
+  async _writeStores(repo, stores, mode, accountId = null) {
     let count = 0;
     for (const name of storeNames()) {
       const rows = stores[name];
@@ -43,7 +47,13 @@ export const Backup = {
       if (mode === 'replace') await this.clearStore(repo, name);
       for (const row of rows) {
         if (!row || typeof row !== 'object' || row.id == null) throw new Error(`仓库 ${name} 存在缺少 id 的记录`);
-        await repo.put(name, row);
+        // 题库数据文件用占位账号，加载时归到当前登录账号，换账号也能直接用
+        let record = row;
+        if (accountId && this.ACCOUNT_SCOPED_STORES.includes(name)
+            && (row.accountId === this.IMPORT_ACCOUNT || row.accountId == null)) {
+          record = { ...row, accountId };
+        }
+        await repo.put(name, record);
         count++;
       }
     }
@@ -71,6 +81,16 @@ export const Backup = {
     quiz: ['category', 'bank', 'question', 'attempt'],
     group: ['group', 'groupMember', 'joinRequest', 'project', 'task', 'attachment', 'opLog', 'notification'],
     accounts: ['accounts'],
+  },
+
+  // 顶栏「清空数据」：清空全部业务数据，保留账号
+  async clearBusinessData(repo) {
+    let removed = 0;
+    for (const key of Object.keys(this.MODULES)) {
+      if (key === 'accounts') continue;
+      removed += await this.clearModule(repo, key);
+    }
+    return removed;
   },
 
   async clearModule(repo, moduleKey) {

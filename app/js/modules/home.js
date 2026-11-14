@@ -3,6 +3,7 @@
 import { TodayPlan } from '../lib/todayplan.js';
 import { Ledger } from '../lib/ledger.js';
 import { Group, Task } from '../lib/group.js';
+import { DevWork } from '../lib/devwork.js';
 import { Quiz } from '../lib/quiz.js';
 import { todayStr, monthStr, formatAmount } from '../lib/utils.js';
 
@@ -26,6 +27,17 @@ export function isNavControl(target) {
   return false;
 }
 
+// P2 纯函数：开发工作卡片摘要——与「开发工作」模块共用 devTask 数据
+// 返回总数 / 进行中 / 待开始 / 未完成数，以及卡片上要展示的任务（未完成优先，最多 limit 条）
+export function devTaskSummary(tasks, limit = 4) {
+  const list = Array.isArray(tasks) ? tasks : [];
+  const doing = list.filter((t) => t.status === '进行中').length;
+  const todo = list.filter((t) => t.status === '待开始').length;
+  const open = list.filter((t) => t.status !== '已完成');
+  const shown = (open.length ? open : list).slice(0, Math.max(0, limit));
+  return { total: list.length, doing, todo, openCount: open.length, shown, allDone: list.length > 0 && open.length === 0 };
+}
+
 export default {
   route: 'home',
   title: '首页总览',
@@ -46,6 +58,13 @@ export default {
           </div>
           <div class="muted" data-el="group" style="margin-top:8px">&mdash;</div>
         </div>
+        <div class="card nav-card span-2" data-goto="#devwork">
+          <div class="row" style="justify-content:space-between">
+            <strong>开发工作</strong>
+            <span class="muted" data-el="devSummary"></span>
+          </div>
+          <div data-el="devTasks" style="margin-top:8px"></div>
+        </div>
         <div class="card nav-card" data-goto="#quiz">
           <div class="row" style="justify-content:space-between">
             <strong>题库</strong>
@@ -65,6 +84,8 @@ export default {
     const greet = q('[data-el="greet"]');
     const todayPlanEl = q('[data-el="todayPlan"]');
     const groupEl = q('[data-el="group"]');
+    const devSummaryEl = q('[data-el="devSummary"]');
+    const devTasksEl = q('[data-el="devTasks"]');
     const quizEl = q('[data-el="quiz"]');
     const ledgerEl = q('[data-el="ledger"]');
 
@@ -92,8 +113,10 @@ export default {
       greet.textContent = `今天是 ${todayStr(now)}，祝你顺利`;
 
       if (!accId) {
-        todayPlanEl.innerHTML = '<div class="muted">请先在设置中创建账号。</div>';
+        todayPlanEl.innerHTML = '<div class="muted">请先在右上角登录账号。</div>';
         groupEl.innerHTML = '&mdash;';
+        devSummaryEl.textContent = '';
+        devTasksEl.innerHTML = '<div class="muted">请先在右上角登录账号。</div>';
         quizEl.innerHTML = '&mdash;';
         ledgerEl.innerHTML = '<div class="muted">&mdash;</div>';
         return;
@@ -132,6 +155,20 @@ export default {
         ? '<div class="muted">尚未加入小组</div>'
         : `<div>我的小组：<strong>${groups.length}</strong> 个</div>
            <div class="muted" style="margin-top:4px">待我审核：${pendingReview} · 我的任务：${myTodo}</div>`;
+
+      // 开发工作摘要：任务清单与「开发工作」模块共用同一份 devTask 数据
+      const devTasks = await DevWork.listTasks(repo, accId);
+      const dev = devTaskSummary(devTasks);
+      devSummaryEl.textContent = dev.total ? `进行中 ${dev.doing} · 待开始 ${dev.todo}` : '';
+      if (dev.total === 0) {
+        devTasksEl.innerHTML = '<div class="muted">暂无开发任务。</div>';
+      } else {
+        devTasksEl.innerHTML = dev.shown.map((t) => `
+          <div class="row" style="gap:8px;padding:4px 0;justify-content:space-between">
+            <span style="${t.status === '已完成' ? 'text-decoration:line-through;color:var(--muted)' : ''}">${escapeHtml(t.title)}</span>
+            <span class="muted">${escapeHtml(t.projectName)} · ${escapeHtml(t.status)}</span>
+          </div>`).join('') + `<div class="muted" style="margin-top:6px">未完成 ${dev.openCount} 项 / 共 ${dev.total} 项</div>`;
+      }
 
       // 题库摘要
       const banks = await Quiz.listBanks(repo, accId);

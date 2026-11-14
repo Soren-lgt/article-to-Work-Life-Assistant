@@ -23,6 +23,14 @@ export const STORES = {
   attachment: { keyPath: 'id' },
   opLog: { keyPath: 'id' },
   notification: { keyPath: 'id' },
+  // 小白长期记忆（P19）：聊天/事件原文 + 打分 + 等级
+  petMemory: { keyPath: 'id' },
+  // 小白性格画像（P19）：标签频次、情绪、习惯句
+  petPersona: { keyPath: 'id' },
+  // 小白短期记忆（P23-1）：最近 10 轮对话的缓存，5 分钟没有新对话就清空
+  petShortTerm: { keyPath: 'id' },
+  // P24：小宠物任务话术库（每条一个功能，落库存起来，换设备也读得到）
+  petScript: { keyPath: 'id' },
 };
 
 // 固定三大题目类别

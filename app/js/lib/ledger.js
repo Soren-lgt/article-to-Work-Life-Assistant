@@ -20,6 +20,21 @@ export function findRecordByKey(rows, accountId, cardId, date) {
   ) || null;
 }
 
+// P9-2：卡片在指定日期是否可见
+// - 初始卡片（preset=true）：每一天都出现
+// - 新增消费建的临时卡（带 date）：只在那一天出现
+// - 历史遗留的自建卡（无 date）：按每天出现处理，保证旧数据不丢
+export function isCardVisibleOn(card, date) {
+  if (!card) return false;
+  if (card.preset === true) return true;
+  if (card.date) return card.date === date;
+  return true;
+}
+
+export function cardsVisibleOn(cards, date) {
+  return (cards || []).filter((c) => isCardVisibleOn(c, date));
+}
+
 export const Ledger = {
   // 首次使用初始化预置卡片（幂等）
   async ensureDefaultCards(repo, accountId) {
@@ -39,12 +54,20 @@ export const Ledger = {
     return rows.sort((a, b) => (a.sort || 0) - (b.sort || 0));
   },
 
-  async addCard(repo, accountId, name) {
+  async addCard(repo, accountId, name, { date = null, preset = false } = {}) {
     const n = String(name || '').trim();
     if (!n) throw new Error('分类名称不能为空');
     const cards = await this.listCards(repo, accountId);
     const sort = cards.length ? Math.max(...cards.map((c) => c.sort || 0)) + 1 : 1;
-    return repo.put('ledgerCategory', { accountId, name: n, preset: false, sort, createdAt: Date.now() });
+    const card = { accountId, name: n, preset: !!preset, sort, createdAt: Date.now() };
+    // 只在那一天出现的卡片带上日期；不带日期就是每天都出现的初始卡片
+    if (date) card.date = date;
+    return repo.put('ledgerCategory', card);
+  },
+
+  // P9-3：新增初始卡片——每一天都会出现的卡片
+  async addInitialCard(repo, accountId, name) {
+    return this.addCard(repo, accountId, name, { preset: true });
   },
 
   async renameCard(repo, id, name) {
@@ -96,7 +119,7 @@ export const Ledger = {
 
   // 各卡片当日金额与笔数
   async dayByCard(repo, accountId, date) {
-    const cards = await this.listCards(repo, accountId);
+    const cards = cardsVisibleOn(await this.listCards(repo, accountId), date);
     const rows = await this.listByDate(repo, accountId, date);
     return cards.map((c) => {
       const rc = rows.filter((r) => r.cardId === c.id);
@@ -112,7 +135,8 @@ export const Ledger = {
   async monthSummary(repo, accountId, month) {
     const cards = await this.listCards(repo, accountId);
     const rows = await repo.list('ledgerRecord', (r) => r.accountId === accountId && monthOf(r.date) === month);
-    const perCard = cards.map((c) => {
+    const listed = cards.filter((c) => c.preset === true || rows.some((r) => r.cardId === c.id));
+    const perCard = listed.map((c) => {
       const rc = rows.filter((r) => r.cardId === c.id);
       return { cardId: c.id, name: c.name, total: sumAmounts(rc), count: rc.length };
     });

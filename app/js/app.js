@@ -4,19 +4,22 @@ import { createRepository, IdbAdapter, MemoryAdapter } from './lib/db.js';
 import { AppState } from './appstate.js';
 import { todayStr } from './lib/utils.js';
 import { Accounts } from './lib/accounts.js';
+import { passwordFieldHTML, formErrorHTML } from './lib/accountview.js';
+export { passwordFieldHTML };
 import { Group } from './lib/group.js';
-import { openModal, openConfirm, openPrompt } from './ui/modal.js';
-import { loadPrefs, applyTheme, ensureThemeCss } from './modules/settings.js';
+import { openModal } from './ui/modal.js';
+import { loadPrefs, applyTheme, ensureThemeCss } from './lib/prefs.js';
 import home from './modules/home.js';
 import today from './modules/today.js';
 import devwork from './modules/devwork.js';
 import group from './modules/group.js';
 import quiz from './modules/quiz.js';
 import ledger from './modules/ledger.js';
-import settings from './modules/settings.js';
+import { openAccountMenu } from './ui/accountmenu.js';
+import { mountPet } from './modules/pet.js';
 
 const MODULES = {
-  home, today, devwork, group, quiz, ledger, settings,
+  home, today, devwork, group, quiz, ledger,
 };
 
 function escapeHtml(s) {
@@ -28,11 +31,6 @@ function escapeHtml(s) {
 // 纯函数：顶栏账号按钮文案——未登录/无账号=登录，已登录=当前账号名
 export function accountButtonLabel(currentName, loggedIn) {
   return loggedIn && currentName ? currentName : '登录';
-}
-
-// 纯函数：密码输入框（密文，type=password），data 名与占位文案可配
-export function passwordFieldHTML(placeholder = "请输入密码", dataF = "pwd") {
-  return `<input data-f="${dataF}" type="password" autocomplete="new-password" placeholder="${placeholder}">`;
 }
 
 // 纯函数：登录面板——选择账号 + 密文密码 + 登录按钮
@@ -47,6 +45,7 @@ export function loginPanelHTML(accounts = []) {
     <label class="acc-field"><span>密码（设有密码的账号需填写）</span>
       ${passwordFieldHTML('账号密码', 'loginPwd')}
     </label>
+    ${formErrorHTML()}
     <div class="acc-form-actions">
       <button class="btn primary" data-act="doLogin">登录</button>
     </div>`;
@@ -61,52 +60,39 @@ export function registerPanelHTML() {
     <label class="acc-field"><span>可选本地密码</span>
       ${passwordFieldHTML('可选本地密码', 'pwd')}
     </label>
+    ${formErrorHTML()}
     <div class="acc-form-actions">
       <button class="btn primary" data-act="create">注册并创建</button>
     </div>`;
 }
 
-// 纯函数：账号管理弹窗骨架——顶部“登录/注册”切换 + 动态面板 + 下方账号列表
+// 纯函数：账号弹窗骨架——只有“登录/注册”切换与动态面板
+// P5：登录界面只负责登录/注册；登录后的账号能力全部收敛到顶栏账号下拉菜单
 export function accountManagerBodyHTML() {
   return `
     <div class="auth-tabs">
       <button class="btn primary" data-act="tabLogin">登录</button>
       <button class="btn" data-act="tabRegister">注册</button>
     </div>
-    <div data-el="panel" class="acc-form"></div>
-    <hr style="border:none;border-top:1px solid var(--line);margin:10px 0">
-    <div data-el="list"></div>`;
+    <div data-el="panel" class="acc-form"></div>`;
 }
 
-// 纯函数：账号列表行（当前账号不显示“登录”，显示当前标记；含改名/设密码/删除）
-export function accountListHTML(accounts, currentId) {
-  if (!accounts.length) return '<div class="muted">还没有账号，先在上方创建一个。</div>';
-  return accounts.map((a) => {
-    const active = a.id === currentId;
-    return `<div class="row" style="justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line)">
-      <span style="flex:1">${escapeHtml(a.name)}${active ? ' <span class="muted">[当前]</span>' : ''}${a.passwordHash ? ' 🔒' : ''}</span>
-      <span class="row" style="gap:6px">
-        ${active ? '' : `<button class="btn" data-act="switch" data-id="${a.id}">登录</button>`}
-        ${active ? logoutActionButtonHTML() : ''}
-        <button class="btn" data-act="rename" data-id="${a.id}" data-name="${escapeHtml(a.name)}">改名</button>
-        <button class="btn" data-act="pwd" data-id="${a.id}">设密码</button>
-        <button class="btn danger" data-act="del" data-id="${a.id}" data-name="${escapeHtml(a.name)}">删除</button>
-      </span>
-    </div>`;
-  }).join('');
-}
-
-// 纯函数：是否处于登录态（决定当前账号行是否显示退出按钮）
-export function logoutButtonVisible(currentId) { return Boolean(currentId); }
-
-// 纯函数：退出按钮片段（仅渲染在当前账号操作行）
-export function logoutActionButtonHTML() {
-  return '<button class="btn danger" data-act="logout">退出</button>';
-}
+// P3：账号列表/退出按钮的纯展示函数抽到 lib/accountview.js（登录弹窗只做登录与注册）
+export { accountListHTML, logoutActionButtonHTML, logoutButtonVisible } from './lib/accountview.js';
 
 // 纯函数：是否允许自动登录（用户主动退出后本次会话不再自动选号）
 export function shouldAutoLogin(explicitLogout, hasAccounts) {
   return !explicitLogout && hasAccounts;
+}
+
+// P1 纯函数：这两个动作成功后应关闭账号弹窗、直接进入应用（登录 / 注册）
+export function authActionClosesModal(act) {
+  return act === 'doLogin' || act === 'create';
+}
+
+// P1 纯函数：认证成功后的状态迁移——切到目标账号并清除“主动退出”标记
+export function authSuccessState(accountId) {
+  return { currentAccountId: accountId || null, loggedOut: false };
 }
 
 export const App = {
@@ -116,6 +102,8 @@ export const App = {
   accounts: [],
   refreshAccounts,
   refreshNotify,
+  // 清空/导入数据后重绘当前页面
+  refreshViews: () => renderRoute(),
 };
 
 function pickAdapter() {
@@ -194,7 +182,7 @@ export async function refreshNotify() {
   return n;
 }
 
-// 右上角“登录/账号名”按钮：打开账号管理弹窗（创建/切换/改名/设密/删除）
+// 右上角“登录/账号名”按钮（未登录时）：打开登录 / 注册弹窗
 async function openAccountManager() {
   const ctl = openModal({
     title: '账号管理',
@@ -206,8 +194,6 @@ async function openAccountManager() {
   let mode = 'login';
   async function refresh() {
     App.accounts = await Accounts.list(App.repo);
-    const list = ctl.body.querySelector('[data-el="list"]');
-    list.innerHTML = accountListHTML(App.accounts, AppState.currentAccountId);
   }
   function renderPanel() {
     const panel = ctl.body.querySelector('[data-el="panel"]');
@@ -216,94 +202,53 @@ async function openAccountManager() {
       b.classList.toggle('primary', b.dataset.act === (mode === 'register' ? 'tabRegister' : 'tabLogin'));
     });
   }
+  // P4：弹窗内联错误提示（不再调用原生 alert，避免弹窗打开后输入框点不动）
+  function setFormError(msg) {
+    const el = ctl.body.querySelector('[data-el="formError"]');
+    if (!el) return;
+    el.textContent = String(msg == null ? "" : msg);
+    if (msg) el.removeAttribute('hidden');
+    else el.setAttribute('hidden', '');
+  }
 
   ctl.overlay.addEventListener('click', async (e) => {
     const act = e.target.dataset.act;
-    const id = e.target.dataset.id;
     try {
       if (act === 'tabLogin') { mode = 'login'; renderPanel(); }
       else if (act === 'tabRegister') { mode = 'register'; renderPanel(); }
       else if (act === 'doLogin') {
         const sel = ctl.body.querySelector('[data-f="loginUser"]');
-        const id = sel && sel.value;
-        if (!id) { window.alert('请选择要登录的账号'); return; }
-        const acc = App.accounts.find((a) => a.id === id);
+        const loginId = sel && sel.value;
+        if (!loginId) { setFormError('请选择要登录的账号'); return; }
+        const acc = App.accounts.find((a) => a.id === loginId);
+        const pwdInput = ctl.body.querySelector('[data-f="loginPwd"]');
         if (acc && acc.passwordHash) {
-          const pwd = ctl.body.querySelector('[data-f="loginPwd"]').value;
-          if (!await Accounts.verify(App.repo, id, pwd)) { window.alert('密码错误'); return; }
+          const pwd = pwdInput ? pwdInput.value : '';
+          const passed = await Accounts.verify(App.repo, loginId, pwd);
+          if (!passed) {
+            // P4：密码错误 → 清空密码框并重新聚焦，用户可以直接重输
+            if (pwdInput) { pwdInput.value = ''; pwdInput.focus(); }
+            setFormError('密码错误，请重新输入');
+            return;
+          }
         }
-        AppState.set({ currentAccountId: id, loggedOut: false });
+        setFormError('');
+        AppState.set(authSuccessState(loginId));
         await refreshAccounts();
         await refresh();
+        if (authActionClosesModal(act)) ctl.close();
       } else if (act === 'create') {
         const name = ctl.body.querySelector('[data-f="name"]').value;
         const pwd = ctl.body.querySelector('[data-f="pwd"]').value;
-        await Accounts.create(App.repo, { name, password: pwd });
-        AppState.set({ loggedOut: false });
+        setFormError('');
+        const created = await Accounts.create(App.repo, { name, password: pwd });
+        AppState.set(authSuccessState(created && created.id));
         await refreshAccounts();
         await refresh();
-        mode = 'login';
-        renderPanel();
-      } else if (act === 'switch') {
-        const acc = App.accounts.find((a) => a.id === id);
-        const finishSwitch = async () => {
-          AppState.set({ currentAccountId: id, loggedOut: false });
-          await refreshAccounts();
-          await refresh();
-        };
-        if (acc && acc.passwordHash) {
-          const subCtl = openModal({
-            title: '验证登录', submitText: '登录', cancelText: '取消',
-            bodyHTML: `<label>账号密码（密文输入）</label>${passwordFieldHTML('请输入该账号本地密码')}`,
-            onSubmit: async () => {
-              const p = subCtl.body.querySelector('[data-f="pwd"]').value;
-              if (!await Accounts.verify(App.repo, id, p)) { window.alert('密码错误'); return true; }
-              await finishSwitch();
-              return false;
-            },
-          });
-        } else {
-          await finishSwitch();
-        }
-      } else if (act === 'rename') {
-        openPrompt({
-          title: '改名', label: '新名称', placeholder: e.target.dataset.name || '', submitText: '保存',
-          onSubmit: async (n) => {
-            if (!String(n || '').trim()) return true;
-            await Accounts.rename(App.repo, id, n);
-            await refreshAccounts();
-            await refresh();
-            return false;
-          },
-        });
-      } else if (act === 'pwd') {
-        const subCtl = openModal({
-          title: '设置本地密码', submitText: '保存', cancelText: '取消',
-          bodyHTML: `<label>新密码（留空表示清除密码，密文输入）</label>${passwordFieldHTML('留空表示清除密码')}`,
-          onSubmit: async () => {
-            const v = subCtl.body.querySelector('[data-f="pwd"]').value;
-            await Accounts.setPassword(App.repo, id, v);
-            await refreshAccounts();
-            await refresh();
-            return false;
-          },
-        });
-      } else if (act === 'del') {
-        openConfirm({
-          title: '删除账号', confirmText: '删除',
-          message: '确认删除账号「' + e.target.dataset.name + '」？将同时清空其个人数据。',
-          onConfirm: async () => {
-            await Accounts.remove(App.repo, id);
-            await refreshAccounts();
-            await refresh();
-          },
-        });
-      } else if (act === 'logout') {
-        AppState.set({ currentAccountId: null, loggedOut: true });
-        await refreshAccounts();
-        await refresh();
+        if (authActionClosesModal(act)) ctl.close();
+        else { mode = 'login'; renderPanel(); }
       }
-    } catch (err) { window.alert(err.message); }
+    } catch (err) { setFormError(err.message); }
   });
 
   refresh();
@@ -312,7 +257,12 @@ async function openAccountManager() {
 
 function bindTopbar() {
   const btn = document.getElementById('accountBtn');
-  if (btn) btn.addEventListener('click', openAccountManager);
+  if (!btn) return;
+  btn.addEventListener('click', () => {
+    // P5：已登录 → 展开下拉菜单；未登录 → 打开登录/注册弹窗
+    if (AppState.currentAccountId) openAccountMenu({ repo: App.repo, app: App, anchor: btn });
+    else openAccountManager();
+  });
 }
 
 
@@ -348,9 +298,9 @@ async function boot() {
 
   lastAccId = AppState.currentAccountId;
   await refreshAccounts();
-  // 首次使用且没有任何账号：引导到「数据与设置」页（账号管理已收纳到顶栏弹窗，此处仅兜底）
   renderRoute();
   refreshNotify();
+  mountPet({ repo: App.repo, state: AppState, app: App });
 }
 
 if (typeof window !== 'undefined' && typeof document !== 'undefined') {

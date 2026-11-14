@@ -55,6 +55,25 @@ export function removeCardConfirmHTML(name) {
   return `<div>确认删除「${escapeHtml(name)}」及其全部记账记录？此操作不可撤销。</div>`;
 }
 
+// 纯函数：顶部日期栏——日期选择器就放在「前一天 / 后一天」两个按钮中间
+export function ledgerHeaderHTML() {
+  return `<div class="card" style="margin-bottom:14px">
+      <div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:8px">
+        <div class="row" style="align-items:center;gap:8px">
+          <button class="btn" data-act="prev">&lsaquo; 前一天</button>
+          <input type="date" data-el="datePicker" class="ledger-date" style="width:150px">
+          <strong data-el="dateLabel" hidden></strong>
+          <button class="btn" data-act="next">后一天 &rsaquo;</button>
+          <button class="btn" data-act="today"></button>
+        </div>
+        <div class="row">
+          <button class="btn" data-act="addCard">+ 新增消费</button>
+          <button class="btn" data-act="toggleView">月度汇总</button>
+        </div>
+      </div>
+    </div>`;
+}
+
 export default {
   route: 'ledger',
   title: '每日记账',
@@ -65,21 +84,7 @@ export default {
     let month = monthStr();
 
     el.innerHTML = `
-      <div class="card" style="margin-bottom:14px">
-        <div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:8px">
-          <div class="row">
-            <button class="btn" data-act="prev">&lsaquo; 前一天</button>
-            <strong data-el="dateLabel"></strong>
-            <button class="btn" data-act="next">后一天 &rsaquo;</button>
-            <button class="btn" data-act="today"></button>
-            <input type="date" data-el="datePicker" title="选择历史日期">
-          </div>
-          <div class="row">
-            <button class="btn" data-act="addCard">+ 新增消费</button>
-            <button class="btn" data-act="toggleView">月度汇总</button>
-          </div>
-        </div>
-      </div>
+      ${ledgerHeaderHTML()}
       <div data-el="dayView"></div>
       <div data-el="monthView" hidden></div>`;
 
@@ -122,7 +127,7 @@ export default {
       });
     }
 
-    // 新增消费：可靠模态，可同时录入首笔金额；自建卡不进入初始卡片管理
+    // 新增消费：可靠模态，可同时录入首笔金额；这样建的卡只在当天出现（不进初始卡片管理）
     function openNewConsumeModal() {
       const accId = state.currentAccountId;
       if (!accId) { window.alert('请先创建并选择账号'); return; }
@@ -137,7 +142,7 @@ export default {
           const amtRaw = ctl.body.querySelector('[data-f="amt"]').value;
           const note = ctl.body.querySelector('[data-f="note"]').value.trim();
           try {
-            const card = await Ledger.addCard(repo, accId, name);
+            const card = await Ledger.addCard(repo, accId, name, { date });
             const { ok, value } = ledgerAmountFromInput(amtRaw);
             if (ok) await Ledger.addRecord(repo, accId, { cardId: card.id, amount: value, note, date });
           } catch (e) { window.alert(e.message); return true; }
@@ -168,8 +173,9 @@ export default {
       await Ledger.ensureDefaultCards(repo, accId);
       const byCard = await Ledger.dayByCard(repo, accId, date);
       const day = await Ledger.dayTotal(repo, accId, date);
-      dateLabel.textContent = date; // 仅显示日期，不附加当天标记
       syncTodayButton();
+      datePicker.hidden = false;
+      dateLabel.hidden = true;
       datePicker.value = date;
 
       dayView.innerHTML = `
@@ -190,6 +196,8 @@ export default {
       const accId = state.currentAccountId;
       if (!accId) { monthView.innerHTML = '<div class="card muted">请先选择账号。</div>'; return; }
       const s = await Ledger.monthSummary(repo, accId, month);
+      datePicker.hidden = true;
+      dateLabel.hidden = false;
       dateLabel.textContent = month + ' 月度汇总';
       monthView.innerHTML = `
         <div class="card">
