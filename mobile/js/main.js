@@ -1,4 +1,4 @@
-// 工作生活助手 · 移动版启动器
+// 朝暮 · 移动版启动器
 // 只读复用 app/js/lib 业务层与 app/js/ui/modal.js；本文件与 mobile/views 均为新增，不修改 app/、desktop/。
 import { createRepository, IdbAdapter, MemoryAdapter } from '../../app/js/lib/db.js';
 import { AppState } from '../../app/js/appstate.js';

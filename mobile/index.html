@@ -7,13 +7,14 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <meta name="description" content="工作生活助手 移动版（PWA）：今日计划、记账、题库、开发工作、同组协作与备份恢复，数据存本机。">
+  <meta name="description" content="朝暮 移动版（PWA）：今日计划、记账、题库、开发工作、同组协作与备份恢复，数据存本机。">
   <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
   <link rel="icon" href="icons/favicon.svg" type="image/svg+xml">
-  <link rel="apple-touch-icon" href="icons/icon-192.png">
-  <meta name="apple-mobile-web-app-title" content="生活助手">
+  <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-title" content="朝暮">
   <link rel="stylesheet" href="css/mobile.css">
-  <title>工作生活助手 · 移动版</title>
+  <title>朝暮 · 工作生活助手</title>
 </head>
 <body>
   <header class="appbar">
@@ -37,12 +38,12 @@
   </main>
 
   <nav class="tabbar" id="tabbar" aria-label="主导航">
-    <button class="tab active" data-route="home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/></svg><span>首页</span></button>
-    <button class="tab" data-route="today"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M9 11l2 2 4-4"/><path d="M8 3v4M16 3v4"/></svg><span>计划</span></button>
-    <button class="tab" data-route="devwork"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6 6 8l-2 2v6l2 2 2 2"/><path d="m16 6 2 2 2 2v6l-2 2-2 2"/><path d="M14 4l-4 16"/></svg><span>开发</span></button>
-    <button class="tab" data-route="group"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 20c0-3 2.5-4.5 5.5-4.5S14.5 17 14.5 20"/><circle cx="17" cy="9" r="2.5"/><path d="M15.5 15.6c2.8.2 5 1.6 5 4.4"/></svg><span>同组</span></button>
-    <button class="tab" data-route="quiz"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.2 9a2.8 2.8 0 0 1 5.5.7c0 1.8-2.7 2.1-2.7 3.8"/><path d="M12 17h.01"/></svg><span>题库</span></button>
-    <button class="tab" data-route="ledger"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18M7 15h4"/></svg><span>记账</span></button>
+    <button class="tab active" data-route="home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.4 10.9 12 3.6l8.6 7.3"/><path d="M5.6 9.8v10.6h12.8V9.8"/><path d="M9.7 20.4v-5.2h4.6v5.2"/></svg><span>首页</span></button>
+    <button class="tab" data-route="today"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.6" y="5.4" width="16.8" height="14.4" rx="2.4"/><path d="M8.4 3v3.8M15.6 3v3.8"/><path d="M8.6 12.4l2.3 2.3 4.4-4.6"/></svg><span>计划</span></button>
+    <button class="tab" data-route="devwork"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9.6 7.2 6 12l3.6 4.8"/><path d="M14.4 7.2 18 12l-3.6 4.8"/><path d="M12.8 5.8l-1.6 12.4"/></svg><span>开发</span></button>
+    <button class="tab" data-route="group"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8.8" cy="8.2" r="3"/><path d="M3.6 19.4c0-3 2.4-4.6 5.2-4.6s5.2 1.6 5.2 4.6"/><circle cx="16.8" cy="9.4" r="2.4"/><path d="M15.6 15.2c2.7.2 4.8 1.7 4.8 4.2"/></svg><span>同组</span></button>
+    <button class="tab" data-route="quiz"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.6"/><path d="M9.4 9.6a2.6 2.6 0 0 1 5.1.5c0 1.7-2.5 2-2.5 3.6"/><path d="M12 17.2h.01"/></svg><span>题库</span></button>
+    <button class="tab" data-route="ledger"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.2" y="6.6" width="17.6" height="12.8" rx="2.6"/><path d="M3.2 10.8h17.6"/><path d="M7.4 15.4h4.2"/></svg><span>记账</span></button>
   </nav>
 
   <script type="module" src="js/main.js"></script>

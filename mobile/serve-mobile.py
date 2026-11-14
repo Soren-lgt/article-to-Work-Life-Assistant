@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""工作生活助手 · 移动版本地预览服务。
+"""朝暮 · 移动版本地预览服务。
 以项目根目录为静态根（页面通过 ../../app 复用业务层），不修改原 app/server.py。
 用法：python serve-mobile.py [端口]  默认 8088
 """
@@ -16,7 +16,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
 if __name__ == "__main__":
     url = f"http://127.0.0.1:{PORT}/mobile/index.html"
-    print("工作生活助手 · 移动版预览：", url)
+    print("朝暮 · 移动版预览：", url)
     print("按 Ctrl+C 停止。Service Worker / PWA 安装仅在 http(s) 或 localhost 下可用。")
     try:
         with socketserver.TCPServer(("127.0.0.1", PORT), Handler) as httpd:

@@ -1,6 +1,6 @@
 {
-  "name": "工作生活助手（移动版）",
-  "short_name": "生活助手",
+  "name": "朝暮 · 工作生活助手",
+  "short_name": "朝暮",
   "description": "今日计划、每日记账、题库练习与考试、开发记录、同组协作；数据存本机 IndexedDB，支持 JSON 备份迁移。",
   "lang": "zh-CN",
   "start_url": "./index.html",

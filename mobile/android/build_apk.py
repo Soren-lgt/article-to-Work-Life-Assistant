@@ -1,4 +1,4 @@
-# 工作生活助手 · 安卓安装包构建脚本（不依赖 Gradle，只用 Android SDK 的 aapt2 / d8 / zipalign / apksigner）
+# 朝暮 · 安卓安装包构建脚本（不依赖 Gradle，只用 Android SDK 的 aapt2 / d8 / zipalign / apksigner）
 # 用法：python build_apk.py
 # 需要：JDK 17+（本机 C:\Program Files\Java\latest\jdk-26）、Android SDK（本机 %LOCALAPPDATA%\android-sdk）
 # 注意：aapt2 不认中文路径，所以中间产物一律在 %TEMP%\wl-apk-build 里构建，最后把 apk 拷回本目录。
@@ -16,10 +16,10 @@ JAVA_HOME = os.path.join(os.environ["LOCALAPPDATA"], "jdk17", "jdk-17.0.21+9")
 KEYSTORE = os.path.join(os.environ["USERPROFILE"], ".worklife-apk", "worklife.jks")
 KEY_PASS = "worklife2026"
 
-APP_NAME = "工作生活助手"
+APP_NAME = "朝暮"
 PKG = "com.worklife.assistant"
-VERSION_CODE = "1"
-VERSION_NAME = "1.0.0"
+VERSION_CODE = "2"
+VERSION_NAME = "1.0.1"
 
 WORK = os.path.join(os.environ["TEMP"], "wl-apk-build")
 RES = os.path.join(WORK, "res")
@@ -170,14 +170,14 @@ def build():
              "-dname", "CN=WorkLife Assistant, OU=Personal, O=WorkLife, L=Changsha, ST=Hunan, C=CN"])
         print("   已生成签名证书（以后重打包复用，升级安装才不会被拒）")
 
-    signed = os.path.join(BUILD, "worklife-assistant-%s.apk" % VERSION_NAME)
+    signed = os.path.join(BUILD, "chaomu-%s.apk" % VERSION_NAME)
     run([os.path.join(BT, "apksigner.bat"), "sign",
          "--ks", KEYSTORE, "--ks-pass", "pass:" + KEY_PASS,
          "--key-pass", "pass:" + KEY_PASS,
          "--out", signed, aligned])
     run([os.path.join(BT, "apksigner.bat"), "verify", signed])
 
-    final = os.path.join(HERE, "worklife-assistant-%s.apk" % VERSION_NAME)
+    final = os.path.join(HERE, "chaomu-%s.apk" % VERSION_NAME)
     shutil.copyfile(signed, final)
     print("APK:", final, os.path.getsize(final), "bytes")
     return final

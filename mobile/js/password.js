@@ -1,4 +1,4 @@
-// 工作生活助手 · 移动版修改密码（电脑版与手机版共用同一套三框校验与文案）
+// 朝暮 · 移动版修改密码（电脑版与手机版共用同一套三框校验与文案）
 // 供顶栏账号菜单与「设置 → 数据与设置」两处调用；不修改 app/、desktop/。
 import { Accounts } from '../../app/js/lib/accounts.js';
 import { openModal } from '../../app/js/ui/modal.js';

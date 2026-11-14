@@ -10,7 +10,7 @@ const root = join(here, '..', '..');
 const androidDir = join(root, 'mobile', 'android');
 const srcPath = join(androidDir, 'java', 'com', 'worklife', 'assistant', 'MainActivity.java');
 const buildPath = join(androidDir, 'build_apk.py');
-const apkPath = join(androidDir, 'worklife-assistant-1.0.0.apk');
+const apkPath = join(androidDir, 'chaomu-1.0.1.apk');
 
 const src = readFileSync(srcPath, 'utf8');
 const build = readFileSync(buildPath, 'utf8');
@@ -45,9 +45,10 @@ test('只有联网权限，不申请多余权限', () => {
 });
 
 test('应用名与包名固定，版本号可追溯', () => {
-  assert.ok(build.includes('APP_NAME = "工作生活助手"'));
-  assert.ok(build.includes('PKG = "com.worklife.assistant"'));
-  assert.ok(build.includes('VERSION_NAME = "1.0.0"'));
+  assert.ok(build.includes('APP_NAME = "朝暮"'), '应用名已改朝暮');
+  assert.ok(build.includes('PKG = "com.worklife.assistant"'), '包名保持不变，老包可直接覆盖升级');
+  assert.ok(build.includes('VERSION_NAME = "1.0.1"'));
+  assert.ok(build.includes('VERSION_CODE = "2"'), '版本号递增');
 });
 
 test('构建只用 SDK 自带工具，不依赖 Gradle', () => {

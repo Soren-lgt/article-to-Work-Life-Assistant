@@ -13,7 +13,7 @@ let runnerVoice = null;
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
 // 话筒图标（纯 SVG，与电脑版同款造型）
-const MIC_SVG = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><rect x="9" y="2.5" width="6" height="11" rx="3" fill="currentColor"/><path d="M6 11a6 6 0 0 0 12 0" fill="none" stroke="currentColor" stroke-width="1.6"/><line x1="12" y1="17" x2="12" y2="21" stroke="currentColor" stroke-width="1.6"/><line x1="8.5" y1="21" x2="15.5" y2="21" stroke="currentColor" stroke-width="1.6"/></svg>';
+const MIC_SVG = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9.2" y="3.2" width="5.6" height="10.6" rx="2.8"/><path d="M5.6 11.8a6.4 6.4 0 0 0 12.8 0"/><path d="M12 18.2v2.6"/><path d="M9 20.8h6"/></svg>';
 function micBtnHTML(){ return `<button type="button" class="btn sm mic-btn" data-act="voice" title="按一下，说一句" aria-label="语音输入">${MIC_SVG}</button>`; }
 function voiceOn(){ return speechAvailable(); }
 

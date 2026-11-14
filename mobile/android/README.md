@@ -1,12 +1,12 @@
 # 安卓安装包（APK）—— 自己打，不依赖第三方打包站
 
-这里放的是「工作生活助手」手机版的安卓壳源码与一键构建脚本。
+这里放的是「朝暮」手机版的安卓壳源码与一键构建脚本。
 打出来的 APK 打开后加载**线上同一份**手机版页面（`https://soren-lgt.github.io/article-to-Work-Life-Assistant/mobile/index.html`），
 所以以后改网页不用重新打 APK，手机上有网打开就是最新版。
 
 ## 产物
 
-- `worklife-assistant-1.0.0.apk` —— 可直接安装的安装包（包名 `com.worklife.assistant`，应用名「工作生活助手」）
+- `chaomu-1.0.1.apk` —— 可直接安装的安装包（包名 `com.worklife.assistant`，应用名「朝暮」）
 - 只有 `INTERNET` 一项权限；没有第三方统计脚本、没有广告 SDK
 
 ## 重新打包
@@ -36,7 +36,7 @@ python build_apk.py
 
 ## 装到手机
 
-1. 把 `worklife-assistant-1.0.0.apk` 传到手机（微信文件助手 / 数据线 / GitHub 下载都行）
+1. 把 `chaomu-1.0.1.apk` 传到手机（微信文件助手 / 数据线 / GitHub 下载都行）
 2. 手机上点开安装，允许「安装未知来源应用」
 3. 首次打开是空的（壳里的 WebView 和手机浏览器数据不互通）：先在「账号管理」注册/登录，
    再用「加载数据」导入在浏览器里导出的 JSON 备份
