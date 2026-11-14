@@ -39,10 +39,10 @@ python serve-mobile.py
 
 ### 方式三：装成安卓 App（不想每次都开浏览器就用这个）
 
-仓库里带了现成的安装包 `mobile/android/chaomu-1.0.2.apk`（约 105 KB，minSdk 21 / targetSdk 34，申请联网与通知两条权限）：
+仓库里带了现成的安装包 `mobile/android/chaomu-1.0.3.apk`（约 105 KB，minSdk 21 / targetSdk 34，申请联网、通知、定时三条能力）：
 
 ```
-https://github.com/Soren-lgt/article-to-Work-Life-Assistant/raw/main/mobile/android/chaomu-1.0.2.apk
+https://github.com/Soren-lgt/article-to-Work-Life-Assistant/raw/main/mobile/android/chaomu-1.0.3.apk
 ```
 
 - 安装：手机浏览器打开上面的直链下载，点安装；首次会问「允许安装未知来源应用」，允许即可。装完桌面图标下方显示「朝暮」。
@@ -50,6 +50,8 @@ https://github.com/Soren-lgt/article-to-Work-Life-Assistant/raw/main/mobile/andr
 - 数据：App 里用的是它自己 WebView 的本地存储，**和手机浏览器不是同一份**。两边都登录同一账号后，用账号菜单「导出数据 / 加载数据」走 JSON 备份即可搬过去。
 - 打不开时：点开图标会先显示「正在打开…」，连不上会直接写明原因，点一下屏幕就重试——正常情况下不会再停在白屏上。
 - 通知：装成 App 后，铃铛里的待办会推到手机通知栏。第一次进入会问一次「要不要开通知」，允许后 Android 13 及以上还会弹系统的通知授权；不想收就点「以后再说」，之后在通知中心里也能再打开。
+- 计划定时提醒：在「计划」里新增/编辑任务时可以填一个提醒时间（时:分），到点推一条到手机通知栏。装成 App 时这一步交给系统闹钟，App 关着、没在前台也会响；浏览器里只有页面开着才会检查（每 30 秒一次，错过 15 分钟内的会补推一条）。
+- 准点程度看系统：Android 13 及以上带 `USE_EXACT_ALARM`，装上就准点；Android 12 要在系统设置里给「朝暮」打开「闹钟和提醒」，不给也能响，但系统可能推迟几分钟。
 - 自己重打包：见 `android/README.md`，需要 JDK 17 + Android SDK 34，`python build_apk.py` 一条命令跑完编译、签名、对齐。
 
 ## 数据存储与迁移

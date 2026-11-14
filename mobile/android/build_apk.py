@@ -18,8 +18,8 @@ KEY_PASS = "worklife2026"
 
 APP_NAME = "朝暮"
 PKG = "com.worklife.assistant"
-VERSION_CODE = "3"
-VERSION_NAME = "1.0.2"
+VERSION_CODE = "4"
+VERSION_NAME = "1.0.3"
 
 WORK = os.path.join(os.environ["TEMP"], "wl-apk-build")
 RES = os.path.join(WORK, "res")
@@ -66,6 +66,8 @@ def stage():
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
 
     <application
         android:label="@string/app_name"
@@ -87,6 +89,11 @@ def stage():
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- 计划提醒到点由系统闹钟叫醒这里，App 没开着也能响 -->
+        <receiver
+            android:name=".NotifyReceiver"
+            android:exported="false" />
     </application>
 </manifest>
 """ % (PKG, VERSION_CODE, VERSION_NAME)

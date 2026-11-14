@@ -1,7 +1,7 @@
 // 朝暮 · 移动版 Service Worker
 // 仅在 http(s)/localhost 下由 main.js 注册；file:// 自动跳过。
 // 策略：首屏静态资源预缓存；其余同源 GET 采用缓存优先（cache-first），离线可打开，网络更新后回写缓存。
-const CACHE = 'worklife-mobile-v15';
+const CACHE = 'worklife-mobile-v17';
 const PRECACHE = [
   './',
   './index.html',
@@ -15,7 +15,8 @@ const PRECACHE = [
   './js/views/group.js',
   './js/lib/notifycenter.js',
   './js/lib/push.js',
-  './js/lib/notifyprompt.js'
+  './js/lib/notifyprompt.js',
+  './js/lib/remind.js'
 ];
 
 self.addEventListener('install', (event) => {

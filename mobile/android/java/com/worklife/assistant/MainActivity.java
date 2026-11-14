@@ -2,12 +2,15 @@ package com.worklife.assistant;
 
 import android.Manifest;
 import android.app.Activity;
+import android.app.AlarmManager;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.content.pm.PackageManager;
+import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.ApplicationInfo;
 import android.graphics.Color;
 import android.net.Uri;
@@ -31,7 +34,11 @@ import android.webkit.ValueCallback;
 import android.widget.FrameLayout;
 import android.widget.TextView;
 
+import org.json.JSONArray;
+import org.json.JSONObject;
+
 import java.util.ArrayList;
+import java.util.HashSet;
 
 /**
  * 朝暮 · 安卓壳
@@ -91,7 +98,7 @@ public class MainActivity extends Activity {
         s.setBuiltInZoomControls(false);
         s.setDisplayZoomControls(false);
         s.setTextZoom(100);
-        s.setUserAgentString(s.getUserAgentString() + " ChaomuApp/1.0.2");
+        s.setUserAgentString(s.getUserAgentString() + " ChaomuApp/1.0.3");
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             s.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
         }
@@ -233,6 +240,12 @@ public class MainActivity extends Activity {
             return notifyState();
         }
 
+        /** 把整份提醒清单交给系统闹钟（网页每次数据变化后重发一份，壳内部先全撤再排，幂等） */
+        @JavascriptInterface
+        public int syncAlarms(String json) {
+            return MainActivity.this.syncAlarms(json);
+        }
+
         @JavascriptInterface
         public boolean notify(String id, String title, String body) {
             if (!"granted".equals(notifyState())) return false;
@@ -270,6 +283,66 @@ public class MainActivity extends Activity {
                 return false;
             }
         }
+    }
+
+    /** 计划提醒用的那枚闹钟（同一个 id 用同一个 requestCode，才能取消掉上次的） */
+    private PendingIntent reminderPI(String id, String title, String body) {
+        Intent it = new Intent(this, NotifyReceiver.class);
+        it.setAction(NotifyReceiver.ACTION);
+        it.putExtra("id", id == null ? "" : id);
+        if (title != null) it.putExtra("title", title);
+        if (body != null) it.putExtra("body", body);
+        int flags = PendingIntent.FLAG_UPDATE_CURRENT;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) flags |= PendingIntent.FLAG_IMMUTABLE;
+        String key = "remind-" + (id == null ? "" : id);
+        return PendingIntent.getBroadcast(this, Math.abs(key.hashCode()) % 100000, it, flags);
+    }
+
+    /** 整份清单重排：先撤掉上次排的，再把"时间还没到"的一条条挂到系统闹钟上 */
+    private int syncAlarms(String json) {
+        AlarmManager am = (AlarmManager) getSystemService(ALARM_SERVICE);
+        if (am == null) return -1;
+        SharedPreferences sp = getSharedPreferences("chaomu-alarms", Context.MODE_PRIVATE);
+        HashSet<String> old = new HashSet<>(sp.getStringSet("ids", new HashSet<String>()));
+        for (String id : old) {
+            try { am.cancel(reminderPI(id, null, null)); } catch (Exception ignored) { }
+        }
+        HashSet<String> fresh = new HashSet<>();
+        int count = 0;
+        long nowMs = System.currentTimeMillis();
+        try {
+            JSONArray arr = new JSONArray(json == null || json.length() == 0 ? "[]" : json);
+            for (int i = 0; i < arr.length(); i++) {
+                JSONObject o = arr.optJSONObject(i);
+                if (o == null) continue;
+                String id = o.optString("id", "");
+                long ts = o.optLong("ts", 0L);
+                if (id.length() == 0 || ts <= nowMs) continue;
+                PendingIntent pi;
+                try {
+                    pi = reminderPI(id, o.optString("title", "计划提醒"), o.optString("body", ""));
+                } catch (Exception e) {
+                    continue;
+                }
+                try {
+                    if (Build.VERSION.SDK_INT >= 31) {
+                        if (am.canScheduleExactAlarms()) {
+                            am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, ts, pi);
+                        } else {
+                            am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, ts, pi);
+                        }
+                    } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                        am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, ts, pi);
+                    } else {
+                        am.setExact(AlarmManager.RTC_WAKEUP, ts, pi);
+                    }
+                    fresh.add(id);
+                    count++;
+                } catch (Exception ignored) { }
+            }
+        } catch (Exception ignored) { }
+        sp.edit().putStringSet("ids", fresh).apply();
+        return count;
     }
 
     /** 点开就先给个可见的反馈，避免“点了没反应”的错觉 */

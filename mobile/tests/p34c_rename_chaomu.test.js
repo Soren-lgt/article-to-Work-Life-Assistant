@@ -31,7 +31,7 @@ test('页面标题与 iOS 主屏名同步改成朝暮', () => {
 test('安装包的应用名就是朝暮', () => {
   assert.ok(build.includes('APP_NAME = "朝暮"'));
   assert.ok(activity.includes('朝暮'), '壳里的注释同步');
-  assert.ok(activity.includes('ChaomuApp/1.0.2'), 'UserAgent 也换成新名字，便于在日志里认出来');
+  assert.ok(activity.includes('ChaomuApp/1.0.3'), 'UserAgent 也换成新名字，便于在日志里认出来');
 });
 
 test('包名保持不动，老包能覆盖升级、数据不丢', () => {
@@ -52,6 +52,6 @@ test('Service Worker 缓存升版，手机上才会换成新图标与新名字',
 
 test('安装包文件名与版本号', () => {
   assert.ok(build.includes('"chaomu-%s.apk"'), '产物名 chaomu-*.apk');
-  assert.ok(build.includes('VERSION_NAME = "1.0.2"'));
-  assert.ok(build.includes('VERSION_CODE = "3"'), '比上一版大，可直接覆盖安装');
+  assert.ok(build.includes('VERSION_NAME = "1.0.3"'));
+  assert.ok(build.includes('VERSION_CODE = "4"'), '比上一版大，可直接覆盖安装');
 });

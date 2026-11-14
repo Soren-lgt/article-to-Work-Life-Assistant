@@ -10,7 +10,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..', '..');
 const src = readFileSync(join(root, 'mobile/android/java/com/worklife/assistant/MainActivity.java'), 'utf8');
 const build = readFileSync(join(root, 'mobile/android/build_apk.py'), 'utf8');
-const apk = readFileSync(join(root, 'mobile/android/chaomu-1.0.2.apk'));
+const apk = readFileSync(join(root, 'mobile/android/chaomu-1.0.3.apk'));
 
 test('启动徽标被系统认作可启动入口（最常见的“点了没反应”原因）', () => {
   assert.ok(build.includes('android:exported="true"'), 'targetSdk 34 下缺少它，点击图标不会启动');
@@ -75,7 +75,7 @@ test('打包进去的 dex 确实含新逻辑（不是只改了源码）', () => 
   assert.ok(dex, 'APK 里有 classes.dex');
   assert.ok(dex.includes(Buffer.from('Lcom/worklife/assistant/MainActivity;')), 'MainActivity 已编进 dex');
   assert.ok(dex.includes(Buffer.from('onReceivedError')), '错误兜底已编进 dex');
-  assert.ok(dex.includes(Buffer.from('ChaomuApp/1.0.2')), 'UA 标识已编进 dex');
+  assert.ok(dex.includes(Buffer.from('ChaomuApp/1.0.3')), 'UA 标识已编进 dex');
 });
 
 test('同一签名证书，老包装新包能直接覆盖', () => {

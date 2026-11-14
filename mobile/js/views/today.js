@@ -3,6 +3,7 @@ import { TodayPlan } from '../../../app/js/lib/todayplan.js';
 import { todayStr, monthStr } from '../../../app/js/lib/utils.js';
 import { openModal } from '../../../app/js/ui/modal.js';
 import { pushNotice, pruneNotices } from '../lib/notifycenter.js';
+import { parseTime } from '../lib/remind.js';
 
 function pad(n){ return String(n).padStart(2,'0'); }
 function shiftDate(date, delta){
@@ -23,6 +24,8 @@ function taskFormHTML(prefill={}){
   const opts=['高','中','低'].map((p)=>`<option ${p===pri?'selected':''}>${p}</option>`).join('');
   return `<div class="field"><label>任务标题</label><input data-f="title" value="${v('title')}" placeholder="要做什么？"></div>
     <div class="field"><label>优先级</label><select data-f="priority">${opts}</select></div>
+    <div class="field"><label>提醒时间（可选）</label><input data-f="time" type="time" value="${v('time')}"></div>
+    <div class="muted" style="font-size:12px;line-height:1.6;margin:-6px 0 10px">设了时间，到点会推到手机通知栏；装成 App 时就算没开着 App 也会响。</div>
     <div class="field"><label>备注（可选）</label><input data-f="note" value="${v('note')}" placeholder="补充说明"></div>`;
 }
 
@@ -89,8 +92,12 @@ export default {
           if(!title){ window.alert('计划内容不能为空'); return true; }
           const priority=ctl.body.querySelector('[data-f="priority"]').value;
           const note=ctl.body.querySelector('[data-f="note"]').value.trim();
+          const timeRaw=ctl.body.querySelector('[data-f="time"]').value;
+          const time=parseTime(timeRaw);
+          if(String(timeRaw||'').trim() && !time){ window.alert('时间格式应为「时:分」，例如 09:30'); return true; }
           const rec=await TodayPlan.add(repo,accId,{title,date,priority,note});
-          await pushNotice(repo,{accountId:accId,kind:'plan',refType:'plan',refId:rec&&rec.id,title:'新增计划：'+title,body:`${date} · ${priority}${note?' · '+note:''}`});
+          if(time) await TodayPlan.update(repo,rec.id,{time});
+          await pushNotice(repo,{accountId:accId,kind:'plan',refType:'plan',refId:rec&&rec.id,title:'新增计划：'+title,body:`${date} · ${priority}${time?' · '+time:''}${note?' · '+note:''}`});
           state.emit(); await refresh(); return false;
         }});
     }
@@ -101,8 +108,11 @@ export default {
           if(!title){ window.alert('计划内容不能为空'); return true; }
           const priority=ctl.body.querySelector('[data-f="priority"]').value;
           const note=ctl.body.querySelector('[data-f="note"]').value.trim();
-          await TodayPlan.update(repo,task.id,{title,priority,note});
-          await pushNotice(repo,{accountId:state.currentAccountId,kind:'plan',refType:'plan',refId:task.id,title:'修改计划：'+title,body:`${task.date||date} · ${priority}`});
+          const timeRaw=ctl.body.querySelector('[data-f="time"]').value;
+          const time=parseTime(timeRaw);
+          if(String(timeRaw||'').trim() && !time){ window.alert('时间格式应为「时:分」，例如 09:30'); return true; }
+          await TodayPlan.update(repo,task.id,{title,priority,note,time});
+          await pushNotice(repo,{accountId:state.currentAccountId,kind:'plan',refType:'plan',refId:task.id,title:'修改计划：'+title,body:`${task.date||date} · ${priority}${time?' · '+time:''}`});
           state.emit(); await refresh(); return false;
         }});
     }
@@ -126,6 +136,7 @@ export default {
             <label class="row" style="gap:8px;flex:1;min-width:0">
               <input type="checkbox" ${r.done?'checked':''} data-op="toggle" data-id="${r.id}">
               <span style="flex:1;min-width:0;${r.done?'text-decoration:line-through;color:var(--muted)':''}">${escapeHtml(r.title)}</span>
+              ${r.time?`<span class="muted" style="font-size:12px;white-space:nowrap;${r.done?'text-decoration:line-through':''}">${escapeHtml(r.time)}</span>`:''}
               <span class="tag ${r.priority==='高'?'danger':r.priority==='低'?'ok':'warn'}">${escapeHtml(r.priority)}</span>
             </label>
           </div>

@@ -135,15 +135,18 @@ export async function publishNotice(notice) {
   }
   if (permissionOf() !== 'granted') return false;
   const options = buildNotificationOptions(notice);
-  try {
-    const hasSw = typeof navigator !== 'undefined' && navigator.serviceWorker && navigator.serviceWorker.controller;
-    if (hasSw) {
+  const hasSw = typeof navigator !== 'undefined' && navigator.serviceWorker && navigator.serviceWorker.controller;
+  if (hasSw) {
+    // 走 Service Worker 推（关掉页面也能留在通知栏）；这一步失败就退回页面直推，别让通知悄悄丢掉
+    try {
       const reg = await navigator.serviceWorker.ready;
       if (reg && typeof reg.showNotification === 'function') {
         await reg.showNotification(notice.title, options);
         return true;
       }
-    }
+    } catch (e) { /* 退回下面的页面直推 */ }
+  }
+  try {
     if (typeof Notification === 'function') {
       new Notification(notice.title, options);
       return true;

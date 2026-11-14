@@ -10,7 +10,7 @@ const root = join(here, '..', '..');
 const androidDir = join(root, 'mobile', 'android');
 const srcPath = join(androidDir, 'java', 'com', 'worklife', 'assistant', 'MainActivity.java');
 const buildPath = join(androidDir, 'build_apk.py');
-const apkPath = join(androidDir, 'chaomu-1.0.2.apk');
+const apkPath = join(androidDir, 'chaomu-1.0.3.apk');
 
 const src = readFileSync(srcPath, 'utf8');
 const build = readFileSync(buildPath, 'utf8');
@@ -38,11 +38,13 @@ test('安装包打开的就是线上手机版（同一份代码）', () => {
   assert.ok(src.includes('setDatabaseEnabled(true)'), 'IndexedDB 依赖数据库开关');
 });
 
-test('只申请联网与通知两条权限，不碰别的', () => {
+test('只申请联网、通知、定时三条能力，不碰别的', () => {
   const perms = build.match(/android\.permission\.[A-Z_]+/g) || [];
   assert.deepEqual([...new Set(perms)], [
     'android.permission.INTERNET',
     'android.permission.POST_NOTIFICATIONS',
+    'android.permission.SCHEDULE_EXACT_ALARM',
+    'android.permission.USE_EXACT_ALARM',
   ]);
   assert.equal(src.includes('getDeviceId'), false, '不读设备信息');
 });
@@ -50,8 +52,8 @@ test('只申请联网与通知两条权限，不碰别的', () => {
 test('应用名与包名固定，版本号可追溯', () => {
   assert.ok(build.includes('APP_NAME = "朝暮"'), '应用名已改朝暮');
   assert.ok(build.includes('PKG = "com.worklife.assistant"'), '包名保持不变，老包可直接覆盖升级');
-  assert.ok(build.includes('VERSION_NAME = "1.0.2"'));
-  assert.ok(build.includes('VERSION_CODE = "3"'), '版本号递增');
+  assert.ok(build.includes('VERSION_NAME = "1.0.3"'));
+  assert.ok(build.includes('VERSION_CODE = "4"'), '版本号递增');
 });
 
 test('构建只用 SDK 自带工具，不依赖 Gradle', () => {

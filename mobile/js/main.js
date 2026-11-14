@@ -13,6 +13,7 @@ import { loadBackupForAccount } from './lib/importadapt.js';
 import { listNotices, pendingCount, markRead, kindLabel, formatNoticeTime } from './lib/notifycenter.js';
 import { permissionOf, permissionHint, requestPermission, setAppBadge, publishNotice } from './lib/push.js';
 import { maybeAskNotifyPrompt } from './lib/notifyprompt.js';
+import { syncAll as syncPlanReminders, startTicker as startRemindTicker } from './lib/remind.js';
 import { Backup } from '../../app/js/lib/backup.js';
 import { showToast } from '../../app/js/ui/toast.js';
 import { MENU_ITEMS, accountMenuHTML, openAccountMenu, closeAccountMenu } from './accountmenu.js';
@@ -466,11 +467,25 @@ function bindTopbar() {
 }
 
 let lastAccId = null;
+let syncTimer = null;
+
+// 计划提醒跟着数据变：切账号、增删改、勾选完成后都重排一遍（装成 App 时重设系统闹钟）
+function scheduleSyncReminders(delay) {
+  if (syncTimer) clearTimeout(syncTimer);
+  syncTimer = setTimeout(() => {
+    syncTimer = null;
+    const accId = AppState.currentAccountId;
+    if (!accId || !App.repo) return;
+    syncPlanReminders(App.repo, { accountId: accId }).catch(() => {});
+  }, delay == null ? 1500 : delay);
+}
+
 function bindState() {
   AppState.subscribe(async () => {
     if (!App.repo) return;
     await refreshNotify();
     if (AppState.currentAccountId !== lastAccId) { lastAccId = AppState.currentAccountId; renderRoute(); }
+    scheduleSyncReminders();
   });
 }
 
@@ -493,9 +508,12 @@ async function boot() {
     navigator.serviceWorker.register('sw.js').catch((e) => console.warn('SW 注册失败（可忽略，不影响使用）：', e));
   }
 
-  // 第一次进入：问一次要不要把提醒推到通知栏，问过就不再弹
+  // 第一次进入：问一次要不要把提醒推到通知栏，问过就不再弹；
+  // 顺手把已有的计划提醒排上（装成 App 交给系统闹钟，浏览器里靠页面内定时器）
   setTimeout(() => {
     maybeAskNotifyPrompt({ storage: localStorage }).catch(() => {});
+    scheduleSyncReminders(0);
+    startRemindTicker({ interval: 30000 });
   }, 1600);
 }
 
