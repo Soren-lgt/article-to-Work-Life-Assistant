@@ -18,8 +18,8 @@ KEY_PASS = "worklife2026"
 
 APP_NAME = "朝暮"
 PKG = "com.worklife.assistant"
-VERSION_CODE = "2"
-VERSION_NAME = "1.0.1"
+VERSION_CODE = "3"
+VERSION_NAME = "1.0.2"
 
 WORK = os.path.join(os.environ["TEMP"], "wl-apk-build")
 RES = os.path.join(WORK, "res")
@@ -65,6 +65,7 @@ def stage():
     android:versionName="%s">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
         android:label="@string/app_name"

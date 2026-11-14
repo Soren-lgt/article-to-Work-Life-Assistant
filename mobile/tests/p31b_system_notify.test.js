@@ -38,7 +38,7 @@ test('没有 id 的通知用通用 tag，不会互相挤掉', () => {
 });
 
 test('权限提示文案覆盖四种状态', () => {
-  assert.ok(permissionHint('unsupported').includes('不支持'));
+  assert.ok(permissionHint('unsupported').includes('拿不到系统通知'));
   assert.ok(permissionHint('denied').includes('拒绝'));
   assert.ok(permissionHint('granted').includes('通知栏'));
   assert.ok(permissionHint('default').includes('开启'));

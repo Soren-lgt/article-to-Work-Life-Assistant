@@ -1,6 +1,12 @@
 package com.worklife.assistant;
 
+import android.Manifest;
 import android.app.Activity;
+import android.app.Notification;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
+import android.content.pm.PackageManager;
 import android.content.Intent;
 import android.content.pm.ApplicationInfo;
 import android.graphics.Color;
@@ -20,6 +26,7 @@ import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.webkit.JavascriptInterface;
 import android.webkit.ValueCallback;
 import android.widget.FrameLayout;
 import android.widget.TextView;
@@ -36,6 +43,8 @@ public class MainActivity extends Activity {
     private static final String START_URL =
             "https://soren-lgt.github.io/article-to-Work-Life-Assistant/mobile/index.html";
     private static final int REQ_FILE = 1001;
+    private static final int REQ_NOTIFY = 1002;
+    private static final String CHANNEL_ID = "chaomu-notice";
 
     private WebView web;
     private FrameLayout root;
@@ -82,7 +91,7 @@ public class MainActivity extends Activity {
         s.setBuiltInZoomControls(false);
         s.setDisplayZoomControls(false);
         s.setTextZoom(100);
-        s.setUserAgentString(s.getUserAgentString() + " ChaomuApp/1.0.1");
+        s.setUserAgentString(s.getUserAgentString() + " ChaomuApp/1.0.2");
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             s.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
         }
@@ -160,6 +169,11 @@ public class MainActivity extends Activity {
             openInSystem(url);
         });
 
+        // 通知：WebView 里没有 Web Notification API，网页拿不到系统通知，
+        // 所以这里注入一个原生桥（window.ChaomuNotify），由壳负责权限询问和往通知栏推送。
+        createChannel();
+        web.addJavascriptInterface(new NotifyBridge(), "ChaomuNotify");
+
         // 个人自用包，一直开着调试口：万一还有问题，可以用电脑 Chrome 的 chrome://inspect 看日志
         WebView.setWebContentsDebuggingEnabled(true);
 
@@ -169,6 +183,92 @@ public class MainActivity extends Activity {
             layer.setVisibility(View.GONE);
         } else {
             startLoad();
+        }
+    }
+
+    /** 通知渠道：Android 8 以上必须先注册渠道，通知才会真的显示 */
+    private void createChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+            if (nm == null) return;
+            NotificationChannel ch = new NotificationChannel(CHANNEL_ID, "朝暮提醒", NotificationManager.IMPORTANCE_DEFAULT);
+            ch.setDescription("计划、开发、同组里的待办提醒");
+            nm.createNotificationChannel(ch);
+        }
+    }
+
+    /** granted / denied / default（还没问过） */
+    private String notifyState() {
+        if (Build.VERSION.SDK_INT >= 33) {
+            boolean ok = checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED;
+            return ok ? "granted" : "default";
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+            if (nm != null && !nm.areNotificationsEnabled()) return "denied";
+        }
+        return "granted";
+    }
+
+    /** 网页侧能力：state() 查状态、request() 要权限、notify() 推一条到通知栏 */
+    private class NotifyBridge {
+        @JavascriptInterface
+        public String state() {
+            return notifyState();
+        }
+
+        @JavascriptInterface
+        public String request() {
+            if (Build.VERSION.SDK_INT >= 33) {
+                if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) {
+                    return "granted";
+                }
+                try {
+                    requestPermissions(new String[]{ Manifest.permission.POST_NOTIFICATIONS }, REQ_NOTIFY);
+                    return "requesting";
+                } catch (Exception e) {
+                    return "denied";
+                }
+            }
+            return notifyState();
+        }
+
+        @JavascriptInterface
+        public boolean notify(String id, String title, String body) {
+            if (!"granted".equals(notifyState())) return false;
+            try {
+                NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+                if (nm == null) return false;
+                Notification.Builder b;
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    b = new Notification.Builder(MainActivity.this, CHANNEL_ID);
+                } else {
+                    b = new Notification.Builder(MainActivity.this);
+                }
+                Intent open = new Intent(MainActivity.this, MainActivity.class);
+                open.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+                int flags = PendingIntent.FLAG_UPDATE_CURRENT;
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) flags |= PendingIntent.FLAG_IMMUTABLE;
+                String key = (id == null || id.length() == 0) ? "chaomu" : id;
+                PendingIntent pi = PendingIntent.getActivity(MainActivity.this,
+                        Math.abs(key.hashCode()) % 100000, open, flags);
+                String text = body == null ? "" : body;
+                b.setSmallIcon(android.R.drawable.ic_dialog_info)
+                        .setContentTitle(title == null ? "朝暮" : title)
+                        .setContentText(text)
+                        .setStyle(new Notification.BigTextStyle().bigText(text))
+                        .setContentIntent(pi)
+                        .setAutoCancel(true)
+                        .setShowWhen(true);
+                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+                    b.setPriority(Notification.PRIORITY_DEFAULT);
+                }
+                String tag = (id == null || id.length() == 0) ? "chaomu" : ("notice-" + id);
+                nm.notify(tag, Math.abs(tag.hashCode()) % 100000, b.build());
+                return true;
+            } catch (Exception e) {
+                return false;
+            }
         }
     }
 
@@ -238,6 +338,29 @@ public class MainActivity extends Activity {
             return;
         }
         super.onActivityResult(req, res, data);
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int req, String[] perms, int[] results) {
+        if (req == REQ_NOTIFY) {
+            boolean anyGranted = false;
+            for (int r : results) {
+                if (r == PackageManager.PERMISSION_GRANTED) anyGranted = true;
+            }
+            String state = anyGranted ? "granted" : "denied";
+            final String s2 = state;
+            final WebView target = web;
+            if (target != null) {
+                target.post(new Runnable() {
+                    public void run() {
+                        target.evaluateJavascript(
+                                "window.__chaomuNotifyState&&window.__chaomuNotifyState('" + s2 + "')", null);
+                    }
+                });
+            }
+            return;
+        }
+        super.onRequestPermissionsResult(req, perms, results);
     }
 
     @Override

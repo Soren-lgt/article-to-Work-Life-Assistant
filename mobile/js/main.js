@@ -12,6 +12,7 @@ import { ensureCardsReady } from './lib/ledgerinit.js';
 import { loadBackupForAccount } from './lib/importadapt.js';
 import { listNotices, pendingCount, markRead, kindLabel, formatNoticeTime } from './lib/notifycenter.js';
 import { permissionOf, permissionHint, requestPermission, setAppBadge, publishNotice } from './lib/push.js';
+import { maybeAskNotifyPrompt } from './lib/notifyprompt.js';
 import { Backup } from '../../app/js/lib/backup.js';
 import { showToast } from '../../app/js/ui/toast.js';
 import { MENU_ITEMS, accountMenuHTML, openAccountMenu, closeAccountMenu } from './accountmenu.js';
@@ -491,6 +492,11 @@ async function boot() {
   if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
     navigator.serviceWorker.register('sw.js').catch((e) => console.warn('SW 注册失败（可忽略，不影响使用）：', e));
   }
+
+  // 第一次进入：问一次要不要把提醒推到通知栏，问过就不再弹
+  setTimeout(() => {
+    maybeAskNotifyPrompt({ storage: localStorage }).catch(() => {});
+  }, 1600);
 }
 
 if (typeof window !== 'undefined' && typeof document !== 'undefined') boot();
