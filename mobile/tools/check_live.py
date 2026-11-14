@@ -11,6 +11,7 @@ import io
 import os
 import re
 import sys
+import time
 import urllib.request
 
 BASE = "https://soren-lgt.github.io/article-to-Work-Life-Assistant/"
@@ -18,13 +19,19 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 
 
 def collect():
+    """只取页面真正会加载的资源：mobile 的 js/css/icons 与根文件，加上 app/js 里被 import 的文件。"""
     targets = []
+    keep_root = ("index.html", "sw.js", "manifest.webmanifest")
     for dirpath, _dirnames, filenames in os.walk(os.path.join(ROOT, "mobile")):
-        if os.sep + "tools" + os.sep in dirpath:
+        rel_dir = os.path.relpath(dirpath, os.path.join(ROOT, "mobile")).replace(os.sep, "/")
+        if rel_dir != "." and not rel_dir.startswith(("js", "css", "icons")):
             continue
         for fn in filenames:
-            if fn.endswith((".js", ".css", ".webmanifest", ".png", ".svg")):
-                targets.append(os.path.relpath(os.path.join(dirpath, fn), ROOT).replace(os.sep, "/"))
+            if not fn.endswith((".js", ".css", ".webmanifest", ".png", ".svg", ".html", ".json")):
+                continue
+            if rel_dir == "." and fn not in keep_root:
+                continue
+            targets.append(os.path.relpath(os.path.join(dirpath, fn), ROOT).replace(os.sep, "/"))
     imported = set()
     for dirpath, _dirnames, filenames in os.walk(os.path.join(ROOT, "mobile", "js")):
         for fn in filenames:
@@ -41,7 +48,7 @@ def collect():
                 if line.startswith("app/"):
                     imported.add(line)
     targets.extend(sorted(imported))
-    return targets
+    return sorted(set(targets))
 
 
 def main():
@@ -49,12 +56,21 @@ def main():
     bad = []
     for rel in targets:
         url = BASE + rel
-        try:
-            req = urllib.request.Request(url, method="GET")
-            req.add_header("User-Agent", "chaomu-check")
-            urllib.request.urlopen(req, timeout=20).read(1)
-        except Exception as exc:
-            bad.append((rel, getattr(exc, "code", str(exc))))
+        err = None
+        for attempt in range(3):
+            try:
+                req = urllib.request.Request(url, method="GET")
+                req.add_header("User-Agent", "chaomu-check")
+                urllib.request.urlopen(req, timeout=25).read(1)
+                err = None
+                break
+            except Exception as exc:
+                err = exc
+                if getattr(exc, "code", None) == 404:
+                    break
+                time.sleep(1.5 * (attempt + 1))
+        if err is not None:
+            bad.append((rel, getattr(err, "code", str(err))))
     print("checked %d urls, failed %d" % (len(targets), len(bad)))
     for rel, code in bad:
         print("  %s  %s" % (code, rel))
